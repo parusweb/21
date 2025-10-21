@@ -1,0 +1,2947 @@
+1: if ( ! defined( 'ABSPATH' ) ) exit; // Exit if accessed directly
+3: include get_stylesheet_directory() . '/inc/briks-loader.php';
+28:             $num = str_replace([',','-'], '.', $m[1]);
+52:     if (preg_match('/(\d+)\s*шт\s*\/\s*уп|(\d+)\s*штуп/u', $t, $m)) {
+53:         $qty = !empty($m[1]) ? intval($m[1]) : intval($m[2] ?? 1);
+54:         if (preg_match_all('/(\d{2,4})[xх\/](\d{2,4})[xх\/](\d{2,4})/u', $t, $rows)) {
+55:             $nums = array_map('intval', [$rows[1][0], $rows[2][0], $rows[3][0]]);
+56:             rsort($nums);
+57:             $width_mm  = $nums[0];
+58:             $length_mm = $nums[1];
+59:             if ($width_mm > 0 && $length_mm > 0) {
+60:                 $area_m2 = ($width_mm / 1000) * ($length_mm / 1000) * $qty;
+66:     if (preg_match_all('/(\d{2,4})[xх\/](\d{2,4})[xх\/](\d{2,4})/u', $t, $rows)) {
+67:         $nums = array_map('intval', [$rows[1][0], $rows[2][0], $rows[3][0]]);
+68:         rsort($nums);
+69:         $width_mm  = $nums[0];
+70:         $length_mm = $nums[1];
+71:         if ($width_mm > 0 && $length_mm > 0) {
+72:             $area_m2 = ($width_mm / 1000) * ($length_mm / 1000);
+78:     if ($product_id) {
+80:         if ($product) {
+82:             $width = $product->get_attribute('pa_shirina') ?: $product->get_attribute('shirina');
+83:             $length = $product->get_attribute('pa_dlina') ?: $product->get_attribute('dlina');
+85:             if ($width && $length) {
+87:                 preg_match('/(\d+)/', $width, $width_match);
+88:                 preg_match('/(\d+)/', $length, $length_match);
+90:                 if ($width_match[1] && $length_match[1]) {
+91:                     $width_mm = intval($width_match[1]);
+92:                     $length_mm = intval($length_match[1]);
+93:                     $area_m2 = ($width_mm / 1000) * ($length_mm / 1000);
+106:     $product_multiplier = get_post_meta($product_id, '_price_multiplier', true);
+107:     if (!empty($product_multiplier) && is_numeric($product_multiplier)) {
+108:         return floatval($product_multiplier);
+112:     $product_categories = wp_get_post_terms($product_id, 'product_cat', ['fields' => 'ids']);
+113:     if (!is_wp_error($product_categories) && !empty($product_categories)) {
+116:             if (!empty($cat_multiplier) && is_numeric($cat_multiplier)) {
+117:                 return floatval($cat_multiplier);
+122:     return 1.0; // По умолчанию множитель = 1
+126: add_action('woocommerce_product_options_pricing', function() {
+133:         'description' => 'Множитель для расчета итоговой цены (например, 1.5). Если не задан, используется множитель категории.',
+142:     echo '<div class="options_group show_if_simple show_if_variable">';
+143:     echo '<h4 style="padding-left: 12px;">Настройки калькулятора размеров (для столярки)</h4>';
+146:         'id' => '_calc_width_min',
+147:         'label' => 'Ширина мин. (мм)',
+149:         'custom_attributes' => ['step' => '1', 'min' => '0']
+153:         'id' => '_calc_width_max',
+154:         'label' => 'Ширина макс. (мм)',
+156:         'custom_attributes' => ['step' => '1', 'min' => '0']
+160:         'id' => '_calc_width_step',
+161:         'label' => 'Шаг ширины (мм)',
+162:         'placeholder' => '100',
+164:         'custom_attributes' => ['step' => '1', 'min' => '1']
+168:         'id' => '_calc_length_min',
+169:         'label' => 'Длина мин. (м)',
+171:         'custom_attributes' => ['step' => '0.01', 'min' => '0.01']
+175:         'id' => '_calc_length_max',
+176:         'label' => 'Длина макс. (м)',
+178:         'custom_attributes' => ['step' => '0.01', 'min' => '0.01']
+182:         'id' => '_calc_length_step',
+183:         'label' => 'Шаг длины (м)',
+184:         'placeholder' => '0.01',
+186:         'custom_attributes' => ['step' => '0.01', 'min' => '0.01']
+192: add_action('woocommerce_process_product_meta', function($post_id) {
+197:     $calc_fields = [
+198:         '_calc_width_min', '_calc_width_max', '_calc_width_step',
+199:         '_calc_length_min', '_calc_length_max', '_calc_length_step'
+202:     foreach ($calc_fields as $field) {
+203:         $value = isset($_POST[$field]) ? sanitize_text_field($_POST[$field]) : '';
+204:         update_post_meta($post_id, $field, $value);
+209: add_action('product_cat_add_form_fields', function() {
+212:         <label>Множитель цены для категории</label>
+213:         <input type="number" name="category_price_multiplier" step="0.01" min="0" value="">
+214:         <p class="description">Множитель для расчета итоговой цены товаров этой категории (например, 1.5)</p>
+219: add_action('product_cat_edit_form_fields', function($term) {
+223:         <th scope="row"><label>Множитель цены для категории</label></th>
+225:             <input type="number" name="category_price_multiplier" step="0.01" min="0" value="<?php echo esc_attr($multiplier); ?>">
+226:             <p class="description">Множитель для расчета итоговой цены товаров этой категории</p>
+232: add_action('created_product_cat', function($term_id) {
+234:         update_term_meta($term_id, 'category_price_multiplier', sanitize_text_field($_POST['category_price_multiplier']));
+238: add_action('edited_product_cat', function($term_id) {
+240:         update_term_meta($term_id, 'category_price_multiplier', sanitize_text_field($_POST['category_price_multiplier']));
+245: add_filter('woocommerce_get_price_html', function($price, $product) {
+249:     $hide_base_price_categories = range(265, 271);
+250:     $should_hide_base_price = has_term($hide_base_price_categories, 'product_cat', $product_id);
+254:     $leaf_children = [191, 127, 94];
+255:     $leaf_ids = array_merge([$leaf_parent_id], $leaf_children);
+258:     $lumber_categories = range(87, 93);
+260:     $is_leaf_category = has_term($leaf_ids, 'product_cat', $product_id);
+261:     $is_lumber_category = has_term($lumber_categories, 'product_cat', $product_id);
+262:     $is_square_meter = is_square_meter_category($product_id);
+263:     $is_running_meter = is_running_meter_category($product_id);
+265:     if ($is_leaf_category) {
+266:         $price = str_replace('упак.', 'лист', $price);
+270:     $price_multiplier = get_price_multiplier($product->get_id());
+272:     if ($is_running_meter) {
+273:         $base_price_per_m = floatval($product->get_regular_price() ?: $product->get_price());
+274:         if ($base_price_per_m) {
+276:             $min_length = floatval(get_post_meta($product_id, '_calc_length_min', true)) ?: 1;
+277:             $min_length = round($min_length, 2);
+278:             $min_price = $base_price_per_m * $min_length * $price_multiplier;
+280:             if (is_product()) {
+282:                 if ($should_hide_base_price) {
+283:                     return '<span style="font-size:1.1em;">' . wc_price($min_price) . ' за шт. (' . $min_length . ' м)</span>';
+286:                 return wc_price($base_price_per_m) . '<span style="font-size:1.3em; font-weight:600">&nbsp;за пог. м</span><br>' .
+287:                        '<span style="font-size:1.1em;">' . wc_price($min_price) . ' за шт. (' . $min_length . ' м)</span>';
+290:                 if ($should_hide_base_price) {
+291:                     return '<span style="font-size:0.85em;">' . wc_price($min_price) . ' шт.</span>';
+294:                 return wc_price($base_price_per_m) . '<span style="font-size:0.9em; font-weight:600">&nbsp;за пог. м</span><br>' .
+295:                        '<span style="font-size:0.85em;">' . wc_price($min_price) . ' шт.</span>';
+301:     if ($is_square_meter) {
+302:         $base_price_per_m2 = floatval($product->get_regular_price() ?: $product->get_price());
+303:         if ($base_price_per_m2) {
+305:             $is_falshbalka = has_term(266, 'product_cat', $product_id);
+306:             if ($is_falshbalka) {
+308:                 $min_width = floatval(get_post_meta($product_id, '_calc_width_min', true)) ?: 70;
+309:                 $min_length = floatval(get_post_meta($product_id, '_calc_length_min', true)) ?: 1;
+310:                 $min_length = round($min_length, 2);
+312:                 $min_area = 2 * ($min_width / 1000) * $min_length;
+314:                 $min_width = floatval(get_post_meta($product_id, '_calc_width_min', true)) ?: 100;
+315:                 $min_length = floatval(get_post_meta($product_id, '_calc_length_min', true)) ?: 0.01;
+316:                 $min_length = round($min_length, 2);
+317:                 $min_area = ($min_width / 1000) * $min_length;
+319:             $min_price = $base_price_per_m2 * $min_area * $price_multiplier;
+321:             if (is_product()) {
+323:                 if ($should_hide_base_price) {
+324:                     return '<span style="font-size:1.1em;">' . wc_price($min_price) . ' за шт. (' . number_format($min_area, 2) . ' м²)</span>';
+327:                 return wc_price($base_price_per_m2) . '<span style="font-size:1.3em; font-weight:600">&nbsp;за м<sup>2</sup></span><br>' .
+328:                        '<span style="font-size:1.1em;">' . wc_price($min_price) . ' за шт. (' . number_format($min_area, 2) . ' м²)</span>';
+331:                 if ($should_hide_base_price) {
+332:                     return '<span style="font-size:0.85em;">' . wc_price($min_price) . ' шт.</span>';
+335:                 return wc_price($base_price_per_m2) . '<span style="font-size:0.9em; font-weight:600">&nbsp;за м<sup>2</sup></span><br>' .
+336:                        '<span style="font-size:0.85em;">' . wc_price($min_price) . ' шт.</span>';
+342:     if (($is_lumber_category || $is_leaf_category) && is_in_target_categories($product_id)) {
+343:         $base_price_per_m2 = floatval($product->get_regular_price() ?: $product->get_price());
+344:         $pack_area = extract_area_with_qty($product->get_name(), $product_id);
+346:         if ($base_price_per_m2) {
+347:             if (is_product() && $pack_area) {
+348:                 $price_per_pack = $base_price_per_m2 * $pack_area;
+349:                 $unit_text = $is_leaf_category ? 'лист' : 'упаковку';
+351:                 return wc_price($base_price_per_m2) . '<span style="font-size:1.3em; font-weight:600">&nbsp;за м<sup>2</sup></span><br>' .
+352:                        '<span style="font-size:1.3em;"><strong>' . wc_price($price_per_pack) . '</strong> за 1 ' . $unit_text . '</span>';
+353:             } elseif ($pack_area) {
+354:                 $price_per_pack = $base_price_per_m2 * $pack_area;
+355:                 $unit_text = $is_leaf_category ? 'лист' : 'упаковку';
+357:                 return wc_price($base_price_per_m2) . '<span style="font-size:0.9em; font-weight:600">&nbsp;за м<sup>2</sup></span><br>' .
+358:                        '<span style="font-size:1.1em;"><strong>' . wc_price($price_per_pack) . '</strong> за ' . $unit_text . '</span>';
+360:                 $price .= '<span style="font-size:0.9em; font-weight:600">&nbsp;за м<sup>2</sup></span>';
+366: }, 20, 2);
+371:     $product_categories = wp_get_post_terms($product_id, 'product_cat', ['fields' => 'ids']);
+372:     if (is_wp_error($product_categories) || empty($product_categories)) return false;
+374:     $target_categories = [266, 270, 268];
+377:         if (in_array($cat_id, $target_categories)) return true;
+379:             if (cat_is_ancestor_of($target_cat_id, $cat_id)) return true;
+387:     $product_categories = wp_get_post_terms($product_id, 'product_cat', ['fields' => 'ids']);
+388:     if (is_wp_error($product_categories) || empty($product_categories)) return false;
+390:     $target_categories = [267, 271];
+393:         if (in_array($cat_id, $target_categories)) return true;
+395:             if (cat_is_ancestor_of($target_cat_id, $cat_id)) return true;
+403:     $product_categories = wp_get_post_terms($product_id, 'product_cat', ['fields' => 'ids']);
+404:     if (is_wp_error($product_categories) || empty($product_categories)) return false;
+408:         [190, 191, 127, 94],
+413:         if (in_array($cat_id, $target_categories)) return true;
+415:             if (cat_is_ancestor_of($target_cat_id, $cat_id)) return true;
+429:     $product_categories = wp_get_post_terms($product_id, 'product_cat', ['fields' => 'ids']);
+430:     if (is_wp_error($product_categories) || empty($product_categories)) return false;
+431:     $target_categories = [265, 266, 267, 268, 270, 271];
+433:         if (in_array($cat_id, $target_categories)) return true;
+435:             if (cat_is_ancestor_of($target_cat_id, $cat_id)) return true;
+442: function extract_dimensions_from_title($title) {
+443:     if (preg_match('/\d+\/(\d+)(?:\((\d+)\))?\/(\d+)-(\d+)/u', $title, $m)) {
+444:         $widths = [$m[1]];
+445:         if (!empty($m[2])) $widths[] = $m[2];
+446:         $length_min = (int)$m[3];
+447:         $length_max = (int)$m[4];
+448:         return ['widths'=>$widths, 'length_min'=>$length_min, 'length_max'=>$length_max];
+454: add_action('wp_footer', function () {
+455:     if (!is_product()) return;
+462:     error_log('=== FALSEBALK DEBUG START ===');
+463:     error_log('Product ID: ' . $product_id);
+464:     error_log('Product Name: ' . $product->get_name());
+467:     $product_categories = wp_get_post_terms($product_id, 'product_cat', ['fields' => 'all']);
+468:     error_log('Product categories: ' . print_r(wp_list_pluck($product_categories, 'name', 'term_id'), true));
+470:     $is_target = is_in_target_categories($product->get_id());
+471:     $is_multiplier = is_in_multiplier_categories($product->get_id());
+472:     $is_square_meter = is_square_meter_category($product->get_id());
+473:     $is_running_meter = is_running_meter_category($product->get_id());
+475:     error_log('Is target: ' . ($is_target ? 'YES' : 'NO'));
+476:     error_log('Is multiplier: ' . ($is_multiplier ? 'YES' : 'NO'));
+477:     error_log('Is square meter: ' . ($is_square_meter ? 'YES' : 'NO'));
+478:     error_log('Is running meter: ' . ($is_running_meter ? 'YES' : 'NO'));
+481:     $show_falsebalk_calc = false;
+482:     $is_falsebalk = false;
+483:     $shapes_data = array();
+485:     if ($is_square_meter) {
+486:         error_log('Checking for falsebalk category (266)...');
+489:         if (!function_exists('product_in_category')) {
+507:         $is_falsebalk = product_in_category($product->get_id(), 266);
+508:         error_log('Is falsebalk (category 266): ' . ($is_falsebalk ? 'YES' : 'NO'));
+510:         if ($is_falsebalk) {
+511:             $shapes_data = get_post_meta($product->get_id(), '_falsebalk_shapes_data', true);
+512:             error_log('Shapes data retrieved: ' . ($shapes_data ? 'YES' : 'NO'));
+513:             error_log('Shapes data content: ' . print_r($shapes_data, true));
+515:             if (is_array($shapes_data)) {
+516:                 foreach ($shapes_data as $shape_key => $shape_info) {
+517:                     error_log("Checking shape: {$shape_key}");
+518:                     error_log("Shape info: " . print_r($shape_info, true));
+520:                     if (is_array($shape_info)) {
+521:                         $enabled = !empty($shape_info['enabled']);
+522:                         error_log("Shape {$shape_key} enabled: " . ($enabled ? 'YES' : 'NO'));
+524:                         if ($enabled) {
+526:                             $has_width = !empty($shape_info['width_min']) || !empty($shape_info['width_max']);
+527:                             error_log("Has width: " . ($has_width ? 'YES' : 'NO'));
+530:                             $has_height = false;
+532:                                 $has_height = !empty($shape_info['height1_min']) || !empty($shape_info['height1_max']) ||
+533:                                              !empty($shape_info['height2_min']) || !empty($shape_info['height2_max']);
+534:                                 error_log("Has height (P-shape, two heights): " . ($has_height ? 'YES' : 'NO'));
+536:                                 $has_height = !empty($shape_info['height_min']) || !empty($shape_info['height_max']);
+537:                                 error_log("Has height (G/O-shape, one height): " . ($has_height ? 'YES' : 'NO'));
+540:                             $has_length = !empty($shape_info['length_min']) || !empty($shape_info['length_max']);
+541:                             error_log("Has length: " . ($has_length ? 'YES' : 'NO'));
+544:                             $has_old_format = !empty($shape_info['widths']) || 
+545:                                              !empty($shape_info['heights']) || 
+546:                                              !empty($shape_info['lengths']);
+547:                             error_log("Has old format: " . ($has_old_format ? 'YES' : 'NO'));
+549:                             if ($has_width || $has_height || $has_length || $has_old_format) {
+550:                                 $show_falsebalk_calc = true;
+551:                                 error_log("✓ Falsebalk calculator ENABLED for shape: {$shape_key}");
+554:                                 error_log("✗ Shape {$shape_key} has no valid dimensions");
+560:                 error_log('Shapes data is NOT an array or is empty');
+565:     error_log('Final show_falsebalk_calc: ' . ($show_falsebalk_calc ? 'YES' : 'NO'));
+566:     error_log('=== FALSEBALK DEBUG END ===');
+568:     if (!$is_target && !$is_multiplier) {
+569:         error_log('Product not in target or multiplier categories, exiting');
+573:     $pack_area = extract_area_with_qty($title, $product->get_id());
+574:     $dims = extract_dimensions_from_title($title);
+577:     $painting_services = get_available_painting_services_by_material($product->get_id());
+580:     $price_multiplier = get_price_multiplier($product->get_id());
+583:     $calc_settings = null;
+584:     if ($is_multiplier) {
+585:         $calc_settings = [
+586:             'width_min' => floatval(get_post_meta($product->get_id(), '_calc_width_min', true)),
+587:             'width_max' => floatval(get_post_meta($product->get_id(), '_calc_width_max', true)),
+588:             'width_step' => floatval(get_post_meta($product->get_id(), '_calc_width_step', true)) ?: 100,
+589:             'length_min' => floatval(get_post_meta($product->get_id(), '_calc_length_min', true)),
+590:             'length_max' => floatval(get_post_meta($product->get_id(), '_calc_length_max', true)),
+591:             'length_step' => floatval(get_post_meta($product->get_id(), '_calc_length_step', true)) ?: 0.01,
+598:     $leaf_children = [191, 127, 94];
+599:     $leaf_ids = array_merge([$leaf_parent_id], $leaf_children);
+600:     $is_leaf_category = has_term($leaf_ids, 'product_cat', $product_id);
+601:     $unit_text = $is_leaf_category ? 'лист' : 'упаковку';
+602:     $unit_forms = $is_leaf_category ? ['лист', 'листа', 'листов'] : ['упаковка', 'упаковки', 'упаковок'];
+603:     $is_square_meter = has_term([270, 267, 268], 'product_cat', $product->get_id());
+604:     $is_running_meter = has_term([266, 271], 'product_cat', $product->get_id());
+608:     const isSquareMeter = <?php echo $is_square_meter ? 'true' : 'false'; ?>;
+609: const isRunningMeter = 'false';
+610: const paintingServices = <?php echo json_encode($painting_services); ?>;
+611: const priceMultiplier = <?php echo $price_multiplier; ?>;
+612: const isMultiplierCategory = <?php echo $is_multiplier ? 'true' : 'false'; ?>;
+613: const calcSettings = <?php echo $calc_settings ? json_encode($calc_settings) : 'null'; ?>;
+617:     let form = document.querySelector('form.cart') || 
+618:               document.querySelector('form[action*="add-to-cart"]') ||
+619:               document.querySelector('.single_add_to_cart_button').closest('form');
+620:     let quantityInput = document.querySelector('input[name="quantity"]') ||
+621:                        document.querySelector('.qty') ||
+622:                        document.querySelector('.input-text.qty');
+623:     if (!form) return;
+625: const resultBlock = document.createElement('div');
+626: resultBlock.id = 'custom-calc-block';
+627: resultBlock.className = 'calc-result-container'; // ВАЖНО: Добавляем класс для поиска позже
+628: resultBlock.style.marginTop = '20px';
+629: resultBlock.style.marginBottom = '20px';
+630: form.insertAdjacentElement('afterend', resultBlock);
+633:     let isAutoUpdate = false;
+635:         const paintingServices = <?php echo json_encode($painting_services); ?>;
+636:         const priceMultiplier = <?php echo $price_multiplier; ?>;
+637:         const isMultiplierCategory = <?php echo $is_multiplier ? 'true' : 'false'; ?>;
+638:         const isSquareMeter = <?php echo $is_square_meter ? 'true' : 'false'; ?>;
+639:         const isRunningMeter = <?php echo $is_running_meter ? 'true' : 'false'; ?>;
+640:         const calcSettings = <?php echo $calc_settings ? json_encode($calc_settings) : 'null'; ?>;
+642:         function getRussianPlural(n, forms) {
+643:             n = Math.abs(n);
+644:             n %= 100;
+645:             if (n > 10 && n < 20) return forms[2];
+646:             n %= 10;
+647:             if (n === 1) return forms[0];
+648:             if (n >= 2 && n <= 4) return forms[1];
+649:             return forms[2];
+652:         function removeHiddenFields(prefix) {
+653:             const fields = form.querySelectorAll(`input[name^="${prefix}"]`);
+654:             fields.forEach(field => field.remove());
+657:         function createHiddenField(name, value) {
+658:             let field = form.querySelector(`input[name="${name}"]`);
+659:             if (!field) {
+660:                 field = document.createElement('input');
+661:                 field.type = 'hidden';
+662:                 field.name = name;
+663:                 form.appendChild(field);
+665:             field.value = value;
+666:             return field;
+670: function createPaintingServicesBlock(currentCategoryId) {
+671:     if (Object.keys(paintingServices).length === 0) return null;
+673:     const paintingBlock = document.createElement('div');
+674:     paintingBlock.id = 'painting-services-block';
+677:     let optionsHTML = '<option value="" selected>Без покраски</option>';
+678:     Object.entries(paintingServices).forEach(([key, service]) => {
+679:         let optionText = service.name;
+681:         if (currentCategoryId < 265 || currentCategoryId > 271) {
+682:             optionText += ` (+${service.price} ₽/м²)`;
+684:         optionsHTML += `<option value="${key}" data-price="${service.price}">${optionText}</option>`;
+688:     paintingBlock.innerHTML = `
+689:         <br><h4>Услуги покраски</h4>
+692:                 Выберите услугу покраски:
+693:                 <select id="painting_service_select" style="margin-left: 10px; padding: 5px; width: 100%; background: #fff">
+694:                     ${optionsHTML}
+697:             <div id="painting-service-result" style="display:none;"></div>
+700:         <!-- для вставки блоков выбора схем/цветов из pm-paint-schemes.php -->
+701:         <div id="paint-schemes-root"></div>
+703:     return paintingBlock;
+707:         const paintingBlock = createPaintingServicesBlock();
+709:         <?php if($pack_area && $is_target): ?>
+710:         const areaCalc = document.createElement('div');
+711:         areaCalc.id = 'calc-area';
+712:         areaCalc.innerHTML = `
+713:             <br><h4>Расчет количества по площади</h4>
+715:                 Площадь ${<?php echo json_encode($unit_text); ?>.replace('упаковку', 'упаковки').replace('лист', 'листа')}: <strong>${<?php echo $pack_area; ?>.toFixed(3)} м²</strong><br>
+716:                 Цена за ${<?php echo json_encode($unit_text); ?>}: <strong>${(<?php echo floatval($product->get_price()); ?> * <?php echo $pack_area; ?>).toFixed(2)} ₽</strong>
+718:             <label>Введите нужную площадь, м²:
+719:                 <input type="number" min="<?php echo $pack_area; ?>" step="0.1" id="calc_area_input" placeholder="1" style="width:100px; margin-left:10px;">
+721:             <div id="calc_area_result" style="margin-top:10px;"></div>
+723:         resultBlock.appendChild(areaCalc);
+727:             areaCalc.appendChild(paintingBlock);
+730:         const areaInput = document.getElementById('calc_area_input');
+731:         const areaResult = document.getElementById('calc_area_result');
+732:         const basePriceM2 = <?php echo floatval($product->get_price()); ?>;
+733:         const packArea = <?php echo $pack_area; ?>;
+734:         const unitForms = <?php echo json_encode($unit_forms); ?>;
+736:         function updateAreaCalc() {
+737:             const area = parseFloat(areaInput.value);
+739:             if (!area || area <= 0) {
+740:                 areaResult.innerHTML = '';
+741:                 removeHiddenFields('custom_area_');
+742:                 updatePaintingServiceCost(0);
+746:             const packs = Math.ceil(area / packArea);
+747:             const totalPrice = packs * basePriceM2 * packArea;
+748:             const totalArea = packs * packArea;
+749:             const plural = getRussianPlural(packs, unitForms);
+751:             const paintingCost = updatePaintingServiceCost(totalArea);
+752:             const grandTotal = totalPrice + paintingCost;
+754:             let html = `Нужная площадь: <b>${area.toFixed(2)} м²</b><br>`;
+755:             html += `Необходимо: <b>${packs} ${plural}</b><br>`;
+756:             html += `Стоимость материала: <b>${totalPrice.toFixed(2)} ₽</b><br>`;
+757:             if (paintingCost > 0) {
+758:                 html += `Стоимость покраски: <b>${paintingCost.toFixed(2)} ₽</b><br>`;
+759:                 html += `<strong>Итого с покраской: <b>${grandTotal.toFixed(2)} ₽</b></strong>`;
+761:                 html += `<strong>Итого: <b>${totalPrice.toFixed(2)} ₽</b></strong>`;
+764:             areaResult.innerHTML = html;
+766:             createHiddenField('custom_area_packs', packs);
+767:             createHiddenField('custom_area_area_value', area.toFixed(2));
+768:             createHiddenField('custom_area_total_price', totalPrice.toFixed(2));
+769:             createHiddenField('custom_area_grand_total', grandTotal.toFixed(2));
+771:             if (quantityInput) {
+772:                 isAutoUpdate = true;
+773:                 quantityInput.value = packs;
+774:                 quantityInput.dispatchEvent(new Event('change', { bubbles: true }));
+775:                 setTimeout(() => { isAutoUpdate = false; }, 100);
+779:         areaInput.addEventListener('input', updateAreaCalc);
+781:         if (quantityInput) {
+782:             quantityInput.addEventListener('input', function() {
+783:                 if (!isAutoUpdate && areaInput.value) {
+784:                     areaInput.value = '';
+785:                     updateAreaCalc();
+790:         if (quantityInput) {
+791:             quantityInput.addEventListener('change', function() {
+792:                 if (!isAutoUpdate) {
+793:                     const packs = parseInt(this.value);
+794:                     if (packs > 0) {
+795:                         const area = packs * packArea;
+796:                         areaInput.value = area.toFixed(2);
+797:                         updateAreaCalc();
+804:         <?php if($dims && $is_target): ?>
+805:         const dimCalc = document.createElement('div');
+806:         dimCalc.id = 'calc-dim';
+807:         let dimHTML = '<br><h4>Расчет по размерам</h4><div style="display:flex;gap:20px;flex-wrap:wrap;align-items: center;white-space:nowrap">';
+808:         dimHTML += '<label>Ширина (мм): <select id="custom_width">';
+809:         <?php foreach($dims['widths'] as $w): ?>
+810:             dimHTML += '<option value="<?php echo $w; ?>"><?php echo $w; ?></option>';
+812:         dimHTML += '</select></label>';
+813:         dimHTML += '<label>Длина (мм): <select id="custom_length">';
+814:         <?php for($l=$dims['length_min']; $l<=$dims['length_max']; $l+=100): ?>
+815:             dimHTML += '<option value="<?php echo $l; ?>"><?php echo $l; ?></option>';
+816:         <?php endfor; ?>
+817:         dimHTML += '</select></label></div><div id="calc_dim_result" style="margin-top:10px; font-size:1.3em"></div>';
+818:         dimCalc.innerHTML = dimHTML;
+819:         resultBlock.appendChild(dimCalc);
+821:         if (paintingBlock && !document.getElementById('calc-area')) {
+822:             dimCalc.appendChild(paintingBlock);
+825:         const widthEl = document.getElementById('custom_width');
+826:         const lengthEl = document.getElementById('custom_length');
+827:         const dimResult = document.getElementById('calc_dim_result');
+828:         const basePriceDim = <?php echo floatval($product->get_price()); ?>;
+829:         let dimInitialized = false;
+831:         function updateDimCalc(userInteraction = false) {
+832:             const width = parseFloat(widthEl.value);
+833:             const length = parseFloat(lengthEl.value);
+834:             const area = (width/1000) * (length/1000);
+835:             const total = area * basePriceDim;
+837:             const paintingCost = updatePaintingServiceCost(area);
+838:             const grandTotal = total + paintingCost;
+840:             let html = `Площадь: <b>${area.toFixed(3)} м²</b><br>`;
+841:             html += `Стоимость материала: <b>${total.toFixed(2)} ₽</b><br>`;
+842:             if (paintingCost > 0) {
+843:                 html += `Стоимость покраски: <b>${paintingCost.toFixed(2)} ₽</b><br>`;
+844:                 html += `<strong>Итого с покраской: <b>${grandTotal.toFixed(2)} ₽</b></strong>`;
+846:                 html += `<strong>Цена: <b>${total.toFixed(2)} ₽</b></strong>`;
+849:             dimResult.innerHTML = html;
+851:             if (userInteraction) {
+852:                 createHiddenField('custom_width_val', width);
+853:                 createHiddenField('custom_length_val', length);
+854:                 createHiddenField('custom_dim_price', total.toFixed(2));
+855:                 createHiddenField('custom_dim_grand_total', grandTotal.toFixed(2));
+857:                 if (quantityInput) {
+858:                     isAutoUpdate = true;
+859:                     quantityInput.value = 1;
+860:                     quantityInput.dispatchEvent(new Event('change', { bubbles: true }));
+861:                     setTimeout(() => { isAutoUpdate = false; }, 100);
+863:             } else if (!dimInitialized) {
+864:                 dimInitialized = true;
+868:         widthEl.addEventListener('change', () => updateDimCalc(true));
+869:         lengthEl.addEventListener('change', () => updateDimCalc(true));
+871:         if (quantityInput) {
+872:             quantityInput.addEventListener('input', function() {
+873:                 if (!isAutoUpdate && form.querySelector('input[name="custom_width_val"]')) {
+874:                     removeHiddenFields('custom_');
+875:                     removeHiddenFields('painting_service_');
+876:                     widthEl.selectedIndex = 0;
+877:                     lengthEl.selectedIndex = 0;
+878:                     const paintingSelect = document.getElementById('painting_service_select');
+879:                     if (paintingSelect) paintingSelect.selectedIndex = 0;
+880:                     updateDimCalc(false);
+885:         updateDimCalc(false);
+890: $product_cats = wp_get_post_terms($product->get_id(), 'product_cat', array('fields' => 'ids'));
+891: $show_faska = false;
+892: $faska_types = array();
+894: if ($product_cats && !is_wp_error($product_cats)) {
+895:     foreach ($product_cats as $cat_id) {
+896:         if (in_array($cat_id, array(268, 270))) {
+897:             $show_faska = true;
+900:             if ($faska_types) break;
+906: <?php if($is_multiplier && !$show_falsebalk_calc): ?>
+908: const multiplierCalc = document.createElement('div');
+909: multiplierCalc.id = 'calc-multiplier';
+911: let calcHTML = '<br><h4>Калькулятор стоимости</h4>';
+912: if (priceMultiplier !== 1) {
+913:     calcHTML += ``;
+915: calcHTML += '<div style="display:flex;gap:20px;flex-wrap:wrap;align-items: center;">';
+918: if (calcSettings && calcSettings.width_min > 0 && calcSettings.width_max > 0) {
+919:     calcHTML += `<label>Ширина (мм): 
+920:         <select id="mult_width" style="background:#fff;margin-left:10px;">
+921:             <option value="">Выберите...</option>`;
+922:     for (let w = calcSettings.width_min; w <= calcSettings.width_max; w += calcSettings.width_step) {
+923:         calcHTML += `<option value="${w}">${w}</option>`;
+925:     calcHTML += `</select></label>`;
+927:     calcHTML += `<label>Ширина (мм): 
+928:         <input type="number" id="mult_width" min="1" step="100" placeholder="1000" style="width:100px; margin-left:10px;background:#fff;">
+933: if (calcSettings && calcSettings.length_min > 0 && calcSettings.length_max > 0) {
+934:     calcHTML += `<label>Длина (м): 
+935:         <select id="mult_length" min="0.01" step="0.01" style="margin-left:10px;background:#fff;">
+936:             <option value="">Выберите...</option>`;
+937:     for (let l = calcSettings.length_min; l <= calcSettings.length_max; l += calcSettings.length_step) {
+938:         calcHTML += `<option value="${l.toFixed(2)}">${l.toFixed(2)}</option>`;
+940:     calcHTML += `</select></label>`;
+942:     calcHTML += `<label>Длина (м): 
+943:         <input type="number" id="mult_length" min="0.01" step="0.01" placeholder="0.01" style="width:100px; margin-left:10px;">
+948: calcHTML += `<label style="display:none">Количество (шт): <span id="mult_quantity_display" style="display:none">1</span></label>`;
+950: calcHTML += '</div>';
+952: <?php if ($show_faska && !empty($faska_types)): ?>
+954: calcHTML += `<div id="faska_selection" style="margin-top: 10px; display: none;">
+955:     <h5>Выберите тип фаски:</h4>
+956:     <div id="faska_grid" style="display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(2, 1fr); gap: 10px; margin-top: 10px;">
+958:             if (!empty($faska['name'])): ?>
+959:         <label class="faska-option" style="cursor: pointer; text-align: center; padding: 8px; border: 2px solid #ddd; border-radius: 8px; transition: all 0.3s; aspect-ratio: 1;">
+960:             <input type="radio" name="faska_type" value="<?php echo esc_attr($faska['name']); ?>" data-index="<?php echo $index; ?>" data-image="<?php echo esc_url($faska['image']); ?>" style="display: none;">
+961:             <?php if (!empty($faska['image'])): ?>
+962:             <img src="<?php echo esc_url($faska['image']); ?>" alt="<?php echo esc_attr($faska['name']); ?>" style="width: 100%; height: 60px; object-fit: contain; margin-bottom: 3px;">
+964:             <div style="font-size: 11px; line-height: 1.2;"><?php echo esc_html($faska['name']); ?></div>
+969:     <div id="faska_selected" style="display: none; margin-top: 20px; text-align: center; padding: 10px; border: 2px solid rgb(76, 175, 80); border-radius: 8px; background: #f9f9f9;">
+970:         <p style="margin-bottom: 10px;">Выбранная фаска: <span id="faska_selected_name"></span></p>
+971:         <img id="faska_selected_image" src="" alt="" style="height: auto; max-height: 250px; object-fit: contain;">
+972:         <div style="margin-top: 10px;">
+973:             <button type="button" id="change_faska_btn" style="padding: 8px 20px; background: #0073aa; color: white; border: none; border-radius: 4px; cursor: pointer;">Изменить выбор</button>
+976: </div>`;
+979: document.head.insertAdjacentHTML('beforeend', `
+981: #faska_selection .faska-option:has(input:checked) {
+982:     border-color: #0073aa !important;
+983:     background-color: #f0f8ff;
+984:     box-shadow: 0 0 8px rgba(0,115,170,0.4);
+986: #faska_selection .faska-option:hover {
+988:     transform: scale(1.05);
+990: #change_faska_btn:hover {
+991:     background: #005a87 !important;
+994:     #faska_grid {
+995:         grid-template-columns: repeat(3, 1fr) !important;
+996:         grid-template-rows: repeat(3, 1fr) !important;
+999: @media (max-width: 480px) {
+1000:     #faska_grid {
+1001:         grid-template-columns: repeat(2, 1fr) !important;
+1002:         grid-template-rows: repeat(4, 1fr) !important;
+1004:     #faska_selected_image {
+1005:         max-width: 200px !important;
+1012: calcHTML += '<div id="calc_mult_result" style="margin-top:10px; font-size:1.3em"></div>';
+1013: multiplierCalc.innerHTML = calcHTML;
+1014: resultBlock.appendChild(multiplierCalc);
+1018:     multiplierCalc.appendChild(paintingBlock);
+1021: const multWidthEl = document.getElementById('mult_width');
+1022: const multLengthEl = document.getElementById('mult_length');
+1023: const multQuantityDisplay = document.getElementById('mult_quantity_display');
+1024: const multResult = document.getElementById('calc_mult_result');
+1025: const basePriceMult = <?php echo floatval($product->get_price()); ?>;
+1027: function updateMultiplierCalc() {
+1028:     const widthValue = parseFloat(multWidthEl && multWidthEl.value);
+1029:     const lengthValue = parseFloat(multLengthEl && multLengthEl.value);
+1032:     const quantity = (quantityInput && !isNaN(parseInt(quantityInput.value))) ? parseInt(quantityInput.value) : 1;
+1033:     multQuantityDisplay.textContent = quantity;
+1035:     <?php if ($show_faska): ?>
+1037:     const faskaSelection = document.getElementById('faska_selection');
+1038:     if (faskaSelection) {
+1039:         if (widthValue > 0 && lengthValue > 0) {
+1040:             faskaSelection.style.display = 'block';
+1042:             faskaSelection.style.display = 'none';
+1044:             const faskaInputs = document.querySelectorAll('input[name="faska_type"]');
+1045:             faskaInputs.forEach(input => input.checked = false);
+1046:             document.getElementById('faska_grid').style.display = 'grid';
+1047:             document.getElementById('faska_selected').style.display = 'none';
+1052:     if (!widthValue || widthValue <= 0 || !lengthValue || lengthValue <= 0) {
+1053:         multResult.innerHTML = '';
+1054:         removeHiddenFields('custom_mult_');
+1055:         updatePaintingServiceCost(0);
+1059:     const width_m = widthValue / 1000;
+1060:     const length_m = lengthValue;
+1062:     const areaPerItem = width_m * length_m;
+1063:     const totalArea = areaPerItem * quantity;
+1064:     const pricePerItem = areaPerItem * basePriceMult * priceMultiplier;
+1065:     const materialPrice = pricePerItem * quantity;
+1067:     const paintingCost = updatePaintingServiceCost(totalArea);
+1068:     const grandTotal = materialPrice + paintingCost;
+1070:     let html = `Площадь 1 шт: <b>${areaPerItem.toFixed(3)} м²</b><br>`;
+1071:     html += `Общая площадь: <b>${totalArea.toFixed(3)} м²</b> (${quantity} шт)<br>`;
+1072:     html += `Толщина: <b>40мм</b></br>`;
+1073:     html += `Цена за 1 шт: <b>${pricePerItem.toFixed(2)} ₽</b>`;
+1075:     html += '<br>';
+1076:     html += `Стоимость материала: <b>${materialPrice.toFixed(2)} ₽</b><br>`;
+1078:     if (paintingCost > 0) {
+1079:         html += `Стоимость покраски: <b>${paintingCost.toFixed(2)} ₽</b><br>`;
+1080:         html += `<strong>Итого с покраской: <b>${grandTotal.toFixed(2)} ₽</b></strong>`;
+1082:         html += `<strong>Итого: <b>${materialPrice.toFixed(2)} ₽</b></strong>`;
+1085:     multResult.innerHTML = html;
+1087:     createHiddenField('custom_mult_width', widthValue);
+1088:     createHiddenField('custom_mult_length', lengthValue);
+1089:     createHiddenField('custom_mult_quantity', quantity);
+1090:     createHiddenField('custom_mult_area_per_item', areaPerItem.toFixed(3));
+1091:     createHiddenField('custom_mult_total_area', totalArea.toFixed(3));
+1092:     createHiddenField('custom_mult_multiplier', priceMultiplier);
+1093:     createHiddenField('custom_mult_price', materialPrice.toFixed(2));
+1094:     createHiddenField('custom_mult_grand_total', grandTotal.toFixed(2));
+1096:     <?php if ($show_faska): ?>
+1098:     const selectedFaska = document.querySelector('input[name="faska_type"]:checked');
+1099:     if (selectedFaska) {
+1100:         createHiddenField('selected_faska_type', selectedFaska.value);
+1102:         removeHiddenFields('selected_faska_');
+1109: multWidthEl.addEventListener('change', updateMultiplierCalc);
+1110: multLengthEl.addEventListener('change', updateMultiplierCalc);
+1112: <?php if ($show_faska): ?>
+1114: setTimeout(function() {
+1115:     const faskaInputs = document.querySelectorAll('input[name="faska_type"]');
+1116:     const faskaGrid = document.getElementById('faska_grid');
+1117:     const faskaSelected = document.getElementById('faska_selected');
+1118:     const faskaSelectedName = document.getElementById('faska_selected_name');
+1119:     const faskaSelectedImage = document.getElementById('faska_selected_image');
+1120:     const changeFaskaBtn = document.getElementById('change_faska_btn');
+1122:     faskaInputs.forEach(input => {
+1123:         input.addEventListener('change', function() {
+1124:             if (this.checked) {
+1126:                 faskaGrid.style.display = 'none';
+1127:                 faskaSelected.style.display = 'block';
+1130:                 faskaSelectedName.textContent = this.value;
+1131:                 faskaSelectedImage.src = this.dataset.image;
+1132:                 faskaSelectedImage.alt = this.value;
+1134:             updateMultiplierCalc();
+1139:     if (changeFaskaBtn) {
+1140:         changeFaskaBtn.addEventListener('click', function() {
+1141:             faskaGrid.style.display = 'grid';
+1142:             faskaSelected.style.display = 'none';
+1145: }, 100);
+1148: if (quantityInput) {
+1149:     quantityInput.addEventListener('change', function() {
+1150:         if (!isAutoUpdate && multWidthEl.value && multLengthEl.value) {
+1151:             updateMultiplierCalc();
+1157: if (quantityInput) {
+1158:     quantityInput.addEventListener('input', function() {
+1159:         if (!isAutoUpdate) {
+1160:             const mainQty = parseInt(this.value);
+1161:             if (mainQty > 0 && multWidthEl.value && multLengthEl.value) {
+1162:                 multQuantityEl.value = mainQty;
+1163:                 updateMultiplierCalc();
+1169:     quantityInput.addEventListener('change', function() {
+1170:         if (!isAutoUpdate && !form.querySelector('input[name="custom_mult_width"]')) {
+1179: function updatePaintingServiceCost(totalArea = null) {
+1180:     if (!paintingBlock) return 0;
+1183:     const selectedOption = serviceSelect.options[serviceSelect.selectedIndex];
+1184:     const paintingResult = document.getElementById('painting-service-result');
+1186:     if (!selectedOption || !selectedOption.value) {
+1187:         paintingResult.innerHTML = '';
+1188:         removeHiddenFields('painting_service_');
+1192:     const serviceKey = selectedOption.value;
+1193:     const servicePrice = parseFloat(selectedOption.dataset.price);
+1195:     if (!totalArea) {
+1196:         paintingResult.innerHTML = `Выбрана услуга: ${paintingServices[serviceKey].name}`;
+1200:     const totalPaintingCost = totalArea * servicePrice;
+1201:     paintingResult.innerHTML = `${paintingServices[serviceKey].name}: ${totalPaintingCost.toFixed(2)} ₽ (${totalArea.toFixed(3)} м² × ${servicePrice} ₽/м²)`;
+1203:     createHiddenField('painting_service_key', serviceKey);
+1204:     createHiddenField('painting_service_name', paintingServices[serviceKey].name);
+1205:     createHiddenField('painting_service_price_per_m2', servicePrice);
+1206:     createHiddenField('painting_service_area', totalArea.toFixed(3));
+1207:     createHiddenField('painting_service_total_cost', totalPaintingCost.toFixed(2));
+1209:     return totalPaintingCost;
+1217:             const areaInput = document.getElementById('calc_area_input');
+1218:             const widthEl = document.getElementById('custom_width');
+1219:             const lengthEl = document.getElementById('custom_length');
+1220:             const multWidthEl = document.getElementById('mult_width');
+1221:             const multLengthEl = document.getElementById('mult_length');
+1224:             if (areaInput && areaInput.value) {
+1225:                 updateAreaCalc();
+1230:             if (widthEl && lengthEl) {
+1231:                 const width = parseFloat(widthEl.value);
+1232:                 const length = parseFloat(lengthEl.value);
+1233:                 if (width > 0 && length > 0) {
+1234:                     updateDimCalc(true);
+1240:             if (multWidthEl && multLengthEl) {
+1241:                 const width = parseFloat(multWidthEl.value);
+1242:                 const length = parseFloat(multLengthEl.value);
+1243:                 if (width > 0 && length > 0) {
+1244:                     updateMultiplierCalc();
+1250:             const rmWidthEl = document.getElementById('rm_width');
+1251:             const rmLengthEl = document.getElementById('rm_length');
+1252:             if (rmLengthEl && rmLengthEl.value) {
+1253:                 updateRunningMeterCalc();
+1254:                 return; // ВАЖНО: возвращаем return, чтобы не сбросить покраску
+1258:             if (typeof packArea !== 'undefined' && packArea > 0) {
+1259:                 if (areaInput) {
+1260:                     areaInput.value = packArea.toFixed(2);
+1261:                     updateAreaCalc();
+1262:                 } else if (widthEl && lengthEl) {
+1263:                     updateDimCalc(true);
+1267:             updatePaintingServiceCost(0);
+1276:         console.log('Paint color changed, recalculating...');
+1279:         const areaInput = document.getElementById('calc_area_input');
+1280:         const widthEl = document.getElementById('custom_width');
+1281:         const lengthEl = document.getElementById('custom_length');
+1282:         const multWidthEl = document.getElementById('mult_width');
+1283:         const multLengthEl = document.getElementById('mult_length');
+1284:         const rmLengthEl = document.getElementById('rm_length');
+1285:         const sqWidthEl = document.getElementById('sq_width');
+1286:         const sqLengthEl = document.getElementById('sq_length');
+1289:         if (areaInput && areaInput.value) {
+1290:             console.log('Updating area calculator');
+1291:             updateAreaCalc();
+1296:         if (widthEl && lengthEl && widthEl.value && lengthEl.value) {
+1297:             console.log('Updating dimensions calculator');
+1298:             updateDimCalc(true);
+1303:         if (multWidthEl && multLengthEl && multWidthEl.value && multLengthEl.value) {
+1304:             console.log('Updating multiplier calculator');
+1305:             updateMultiplierCalc();
+1310:         if (rmLengthEl && rmLengthEl.value) {
+1311:             console.log('Updating running meter calculator (falsebalk)');
+1312:             updateRunningMeterCalc();
+1317:         if (sqWidthEl && sqLengthEl && sqWidthEl.value && sqLengthEl.value) {
+1318:             console.log('Updating square meter calculator');
+1319:             updateSquareMeterCalc();
+1327: <?php if($is_running_meter): ?>
+1330:     $is_falsebalk = product_in_category($product->get_id(), 266);
+1331:     $shapes_data = array();
+1332:     $show_falsebalk_calculator = $show_falsebalk_calc; // Используем переменную из начала функции
+1334:     if ($show_falsebalk_calculator) {
+1335:         $shapes_data = get_post_meta($product->get_id(), '_falsebalk_shapes_data', true);
+1337:             $shapes_data = array();
+1342:     console.log('=== Running meter calculator initialization ===');
+1343: console.log('Show falsebalk calc:', <?php echo !empty($show_falsebalk_calc) ? 'true' : 'false'; ?>);
+1345:     console.log('Is falsebalk:', <?php echo $is_falsebalk ? 'true' : 'false'; ?>);
+1348:     <?php if ($show_falsebalk_calculator): ?>
+1349:         console.log('Clearing result block for FALSEBALK calculator');
+1350:         if (resultBlock) {
+1351:             resultBlock.innerHTML = '';
+1355:     const runningMeterCalc = document.createElement('div');
+1356:     runningMeterCalc.id = 'calc-running-meter';
+1358:     let rmCalcHTML = '<br><h4>Калькулятор стоимости</h4>';
+1361: <?php if ($show_falsebalk_calculator): ?>
+1363: console.log('=== Rendering FALSEBALK calculator ===');
+1364: const shapesData = <?php echo json_encode($shapes_data); ?>;
+1365: console.log('Shapes data:', shapesData);
+1369: $shape_icons = [
+1370:     'g' => '<svg width="60" height="60" viewBox="0 0 60 60">
+1371:                 <rect x="5" y="5" width="10" height="50" fill="#000"/>
+1372:                 <rect x="5" y="45" width="50" height="10" fill="#000"/>
+1373:             </svg>',
+1374:     'p' => '<svg width="60" height="60" viewBox="0 0 60 60">
+1375:                 <rect x="5" y="5" width="10" height="50" fill="#000"/>
+1376:                 <rect x="45" y="5" width="10" height="50" fill="#000"/>
+1377:                 <rect x="5" y="5" width="50" height="10" fill="#000"/>
+1378:             </svg>',
+1379:     'o' => '<svg width="60" height="60" viewBox="0 0 60 60">
+1380:                 <rect x="5" y="5" width="50" height="50" fill="none" stroke="#000" stroke-width="10"/>
+1381:             </svg>'
+1391: $shapes_buttons_html = '';
+1394:     if (is_array($shape_info) && !empty($shape_info['enabled'])):
+1395:         $shape_label = isset($shape_labels[$shape_key]) ? $shape_labels[$shape_key] : ucfirst($shape_key);
+1396:         $shapes_buttons_html .= '<label class="shape-tile" data-shape="' . esc_attr($shape_key) . '" style="cursor:pointer; border:2px solid #ccc; border-radius:10px; padding:10px; background:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; transition:all .2s; min-width:100px;">';
+1397:         $shapes_buttons_html .= '<input type="radio" name="falsebalk_shape" value="' . esc_attr($shape_key) . '" style="display:none;">';
+1398:         $shapes_buttons_html .= '<div>' . $shape_icons[$shape_key] . '</div>';
+1399:         $shapes_buttons_html .= '<span style="font-size:12px; color:#666; text-align:center;">' . esc_html($shape_label) . '</span>';
+1400:         $shapes_buttons_html .= '</label>';
+1406: rmCalcHTML += '<div style="margin-bottom:20px; border:2px solid #e0e0e0; padding:15px; border-radius:8px; background:#f9f9f9;">';
+1407: rmCalcHTML += '<label style="display:block; margin-bottom:15px; font-weight:600; font-size:1.1em;">Шаг 1: Выберите форму сечения фальшбалки</label>';
+1408: rmCalcHTML += '<div style="display:flex; gap:15px; flex-wrap:wrap;">';
+1409: rmCalcHTML += <?php echo json_encode($shapes_buttons_html); ?>;
+1410: rmCalcHTML += '</div></div>';
+1413: rmCalcHTML += '<div id="falsebalk_params" style="display:none; margin-bottom:20px; border:2px solid #e0e0e0; padding:15px; border-radius:8px; background:#f9f9f9;">';
+1414: rmCalcHTML += '<label style="display:block; margin-bottom:15px; font-weight:600; font-size:1.1em;">Шаг 2: Выберите размеры</label>';
+1415: rmCalcHTML += '<div style="display:flex; gap:20px; flex-wrap:wrap; align-items:center;">';
+1417: rmCalcHTML += `<label style="display:flex; flex-direction:column; gap:5px;">
+1418:     <span style="font-weight:500;">Ширина (мм):</span>
+1419:     <select id="rm_width" style="background:#fff; padding:8px 12px; border:1px solid #ddd; border-radius:4px; min-width:150px;">
+1420:         <option value="">Сначала выберите форму</option>
+1424: rmCalcHTML += `<div id="height_container" style="dislpay:contents"></div>`;
+1426: rmCalcHTML += `<label style="display:flex; flex-direction:column; gap:5px;">
+1427:     <span style="font-weight:500;">Длина (м):</span>
+1428:     <select id="rm_length" style="background:#fff; padding:8px 12px; border:1px solid #ddd; border-radius:4px; min-width:150px;">
+1429:         <option value="">Сначала выберите форму</option>
+1433: rmCalcHTML += `<label style="display:none; flex-direction:column; gap:5px;">
+1434:     <span style="font-weight:500;">Количество (шт):</span>
+1435:     <span id="rm_quantity_display" style="font-weight:600; font-size:1.1em;">1</span>
+1438: rmCalcHTML += '</div></div>';
+1441: rmCalcHTML += '<div id="calc_rm_result" style="margin-top:15px;"></div>';
+1445: console.log('Rendering STANDARD running meter calculator');
+1447: rmCalcHTML += '<div style="display:flex;gap:20px;flex-wrap:wrap;align-items: center;">';
+1450: if (calcSettings && calcSettings.width_min > 0 && calcSettings.width_max > 0) {
+1451:     rmCalcHTML += `<label>Ширина (мм): 
+1452:         <select id="rm_width" style="background:#fff;margin-left:10px;">
+1453:             <option value="">Выберите...</option>`;
+1454:     for (let w = calcSettings.width_min; w <= calcSettings.width_max; w += calcSettings.width_step) {
+1455:         rmCalcHTML += `<option value="${w}">${w}</option>`;
+1457:     rmCalcHTML += `</select></label>`;
+1459:     rmCalcHTML += `<label>Ширина (мм): 
+1460:         <input type="number" id="rm_width" min="1" step="100" placeholder="100" style="width:100px; margin-left:10px;background:#fff">
+1465: if (calcSettings && calcSettings.length_min > 0 && calcSettings.length_max > 0) {
+1466:     rmCalcHTML += `<label>Длина (м): 
+1467:         <select id="rm_length" style="background:#fff;margin-left:10px;">
+1468:             <option value="">Выберите...</option>`;
+1469:     for (let l = calcSettings.length_min; l <= calcSettings.length_max; l += calcSettings.length_step) {
+1470:         rmCalcHTML += `<option value="${l.toFixed(2)}">${l.toFixed(2)}</option>`;
+1472:     rmCalcHTML += `</select></label>`;
+1474:     rmCalcHTML += `<label>Длина (пог. м): 
+1475:         <input type="number" id="rm_length" min="0.1" step="0.1" placeholder="2.0" style="width:100px; margin-left:10px;background:#fff">
+1479: rmCalcHTML += `<label style="display:none">Количество (шт): <span id="rm_quantity_display" style="margin-left:10px; font-weight:600;">1</span></label>`;
+1480: rmCalcHTML += '</div>';
+1481: rmCalcHTML += '<div id="calc_rm_result" style="margin-top:10px;"></div>';
+1485: runningMeterCalc.innerHTML = rmCalcHTML;
+1486: resultBlock.appendChild(runningMeterCalc);
+1487: console.log('✓ Running meter calculator HTML added to DOM');
+1491:     runningMeterCalc.appendChild(paintingBlock);
+1492:     console.log('✓ Painting block added');
+1495: <?php if ($show_falsebalk_calculator): ?>
+1499: function generateOptions(min, max, step, unit = '') {
+1500:     const options = ['<option value="">Выберите...</option>'];
+1501:     if (!min || !max || !step || min > max) return options.join('');
+1502:     const stepsCount = Math.round((max - min) / step) + 1;
+1503:     for (let i = 0; i < stepsCount; i++) {
+1504:         const value = min + (i * step);
+1505:         const displayValue = unit === 'м' ? value.toFixed(2) : Math.round(value);
+1506:         const rawValue = unit === 'м' ? value.toFixed(2) : Math.round(value);
+1507:         options.push(`<option value="${rawValue}">${displayValue}${unit ? ' ' + unit : ''}</option>`);
+1509:     return options.join('');
+1512: function parseOldFormat(data) {
+1513:     if (typeof data === 'string' && data.includes(',')) {
+1514:         const values = data.split(',').map(v => v.trim()).filter(v => v);
+1515:         return values.map(v => `<option value="${v}">${v}</option>`).join('');
+1520: const falsebalkaParams = document.getElementById('falsebalk_params');
+1521: const rmWidthEl = document.getElementById('rm_width');
+1522: const heightContainer = document.getElementById('height_container');
+1523: const rmLengthEl = document.getElementById('rm_length');
+1525: function updateDimensions(selectedShape) {
+1526:     const shapeData = shapesData[selectedShape];
+1527:     console.log('Updating dimensions for:', selectedShape, shapeData);
+1529:     if (!shapeData || !shapeData.enabled) {
+1530:         console.error('No data found for shape:', selectedShape);
+1534:     falsebalkaParams.style.display = 'block';
+1537:     const oldWidthFormat = parseOldFormat(shapeData.widths);
+1538:     if (oldWidthFormat) {
+1539:         rmWidthEl.innerHTML = '<option value="">Выберите...</option>' + oldWidthFormat;
+1541:         rmWidthEl.innerHTML = generateOptions(shapeData.width_min, shapeData.width_max, shapeData.width_step, 'мм');
+1545:     heightContainer.innerHTML = '';
+1546:     if (selectedShape === 'p') {
+1548:         let height1Options, height2Options;
+1549:         const oldHeight1Format = parseOldFormat(shapeData.heights);
+1551:         if (oldHeight1Format) {
+1552:             height1Options = '<option value="">Выберите...</option>' + oldHeight1Format;
+1553:             height2Options = '<option value="">Выберите...</option>' + oldHeight1Format;
+1555:             height1Options = generateOptions(shapeData.height1_min, shapeData.height1_max, shapeData.height1_step, 'мм');
+1556:             height2Options = generateOptions(shapeData.height2_min, shapeData.height2_max, shapeData.height2_step, 'мм');
+1559:         heightContainer.innerHTML = `
+1560:             <label style="display:flex; flex-direction:column; gap:5px;">
+1561:                 <span style="font-weight:500;">Высота 1 (мм):</span>
+1562:                 <select id="rm_height1" style="background:#fff; padding:8px 12px; border:1px solid #ddd; border-radius:4px; min-width:150px;">
+1563:                     ${height1Options}
+1566:             <label style="display:flex; flex-direction:column; gap:5px;">
+1567:                 <span style="font-weight:500;">Высота 2 (мм):</span>
+1568:                 <select id="rm_height2" style="background:#fff; padding:8px 12px; border:1px solid #ddd; border-radius:4px; min-width:150px;">
+1569:                     ${height2Options}
+1574:         document.getElementById('rm_height1').addEventListener('change', updateRunningMeterCalc);
+1575:         document.getElementById('rm_height2').addEventListener('change', updateRunningMeterCalc);
+1578:         const oldHeightFormat = parseOldFormat(shapeData.heights);
+1579:         let heightOptions = oldHeightFormat ? '<option value="">Выберите...</option>' + oldHeightFormat : 
+1580:                            generateOptions(shapeData.height_min, shapeData.height_max, shapeData.height_step, 'мм');
+1582:         heightContainer.innerHTML = `
+1583:             <label style="display:flex; flex-direction:column; gap:5px;">
+1584:                 <span style="font-weight:500;">Высота (мм):</span>
+1585:                 <select id="rm_height" style="background:#fff; padding:8px 12px; border:1px solid #ddd; border-radius:4px; min-width:150px;">
+1586:                     ${heightOptions}
+1591:         document.getElementById('rm_height').addEventListener('change', updateRunningMeterCalc);
+1595:     const oldLengthFormat = parseOldFormat(shapeData.lengths);
+1596:     if (oldLengthFormat) {
+1597:         rmLengthEl.innerHTML = '<option value="">Выберите...</option>' + oldLengthFormat;
+1599:         rmLengthEl.innerHTML = generateOptions(shapeData.length_min, shapeData.length_max, shapeData.length_step, 'м');
+1602:     document.getElementById('calc_rm_result').innerHTML = '';
+1603:     if (typeof removeHiddenFields === 'function') {
+1604:         removeHiddenFields('custom_rm_');
+1610:     const tile = e.target.closest('.shape-tile');
+1611:     if (!tile) return;
+1613:     document.querySelectorAll('.shape-tile').forEach(t => {
+1614:         t.style.borderColor = '#ccc';
+1615:         t.style.boxShadow = 'none';
+1618:     tile.style.borderColor = '#3aa655';
+1619:     tile.style.boxShadow = '0 0 0 3px rgba(58,166,85,0.3)';
+1621:     const radio = tile.querySelector('input[name="falsebalk_shape"]');
+1622:     if (radio) {
+1623:         radio.checked = true;
+1624:         updateDimensions(radio.value);
+1629: document.querySelectorAll('.shape-tile').forEach(tile => {
+1630:     tile.addEventListener('mouseenter', function() {
+1631:         const radio = this.querySelector('input[name="falsebalk_shape"]');
+1632:         if (!radio || !radio.checked) {
+1633:             this.style.borderColor = '#0073aa';
+1634:             this.style.transform = 'scale(1.02)';
+1638:     tile.addEventListener('mouseleave', function() {
+1639:         const radio = this.querySelector('input[name="falsebalk_shape"]');
+1640:         if (!radio || !radio.checked) {
+1641:             this.style.borderColor = '#ccc';
+1642:             this.style.transform = 'scale(1)';
+1647: console.log('✓ Falsebalk event handlers attached');
+1651: console.log('Initializing STANDARD running meter logic');
+1652: const rmWidthEl = document.getElementById('rm_width');
+1653: const rmLengthEl = document.getElementById('rm_length');
+1657: const rmQuantityDisplay = document.getElementById('rm_quantity_display');
+1658: const rmResult = document.getElementById('calc_rm_result');
+1659: const basePriceRM = <?php echo floatval($product->get_price()); ?>;
+1661: function updateRunningMeterCalc() {
+1662:     <?php if ($show_falsebalk_calculator): ?>
+1663:     const selectedShape = document.querySelector('input[name="falsebalk_shape"]:checked');
+1664:     if (!selectedShape) {
+1665:         rmResult.innerHTML = '<span style="color: #999;">⬆️ Выберите форму сечения фальшбалки</span>';
+1669:     const widthValue = rmWidthEl ? parseFloat(rmWidthEl.value) : 0;
+1670:     const lengthValue = parseFloat(rmLengthEl.value);
+1672:     let heightValue = 0;
+1673:     let height2Value = 0;
+1675:     if (selectedShape.value === 'p') {
+1676:         const height1El = document.getElementById('rm_height1');
+1677:         const height2El = document.getElementById('rm_height2');
+1678:         heightValue = height1El ? parseFloat(height1El.value) : 0;
+1679:         height2Value = height2El ? parseFloat(height2El.value) : 0;
+1681:         const heightEl = document.getElementById('rm_height');
+1682:         heightValue = heightEl ? parseFloat(heightEl.value) : 0;
+1685:     const widthValue = rmWidthEl ? parseFloat(rmWidthEl.value) : 0;
+1686:     const lengthValue = parseFloat(rmLengthEl.value);
+1689:     const quantity = (quantityInput && !isNaN(parseInt(quantityInput.value))) ? parseInt(quantityInput.value) : 1;
+1690:     rmQuantityDisplay.textContent = quantity;
+1692:     if (!lengthValue || lengthValue <= 0) {
+1693:         rmResult.innerHTML = '';
+1694:         removeHiddenFields('custom_rm_');
+1695:         updatePaintingServiceCost(0);
+1700: const totalLength = lengthValue * quantity;
+1703: let paintingArea = 0;
+1704: if (widthValue > 0) {
+1705:     const width_m = widthValue / 1000;
+1706:     const height_m = (typeof heightValue !== 'undefined' ? heightValue : 0) / 1000;
+1707:     const height2_m = (typeof height2Value !== 'undefined' ? height2Value : 0) / 1000;
+1709:     if (selectedShape) {
+1710:         const shapeKey = selectedShape.value;
+1711:         if (shapeKey === 'g') {
+1712:             paintingArea = (width_m + height_m) * totalLength;
+1713:         } else if (shapeKey === 'p') {
+1714:             paintingArea = (width_m + height_m + height2_m) * totalLength;
+1715:         } else if (shapeKey === 'o') {
+1717:             paintingArea = 2 * (width_m + height_m) * totalLength;
+1720:             paintingArea = width_m * totalLength;
+1723:         paintingArea = width_m * totalLength;
+1729: const materialPrice = paintingArea * basePriceRM * priceMultiplier;
+1732: const pricePerItem = (quantity > 0) ? (materialPrice / quantity) : 0;
+1735: const paintingCost = updatePaintingServiceCost(paintingArea);
+1738: const grandTotal = materialPrice + paintingCost;
+1741:     <?php if ($show_falsebalk_calculator): ?>
+1742:     const shapeLabel = selectedShape.closest('.shape-tile')?.querySelector('span')?.textContent.trim() || selectedShape.value;
+1743:     let html = `<div style="background: #f0f8ff; padding: 10px; font-size:1em; border-radius: 5px; margin-bottom: 10px; border-left: 4px solid #8bc34a;">`;
+1744:     html += `<div>Форма сечения: <b>${shapeLabel}</b></div>`;
+1745:     if (widthValue > 0) html += `<div>Ширина: <b>${widthValue} мм</b></div>`;
+1746:     if (heightValue > 0) {
+1747:         if (selectedShape.value === 'p') {
+1748:             html += `<div>Высота 1: <b>${heightValue} мм</b></div>`;
+1749:             if (height2Value > 0) html += `<div>Высота 2: <b>${height2Value} мм</b></div>`;
+1751:             html += `<div>Высота: <b>${heightValue} мм</b></div>`;
+1754:     html += `<div>Длина 1 шт: <b>${lengthValue.toFixed(2)} пог. м</b></div></div>`;
+1756:     let html = `Длина 1 шт: <b>${lengthValue.toFixed(2)} пог. м</b><br>`;
+1759:     html += `Общая длина: <b>${totalLength.toFixed(2)} пог. м</b> (${quantity} шт)<br>`;
+1760:     html += `Цена за 1 шт: <b>${pricePerItem.toFixed(2)} ₽</b><br>`;
+1761:     html += `Стоимость материала: <b>${materialPrice.toFixed(2)} ₽</b><br>`;
+1763:     if (paintingCost > 0) {
+1764:         html += `Площадь покраски: <b>${paintingArea.toFixed(3)} м²</b><br>`;
+1765:         html += `Стоимость покраски: <b>${paintingCost.toFixed(2)} ₽</b><br>`;
+1766:         html += `<strong style="font-size: 1.2em; color: #0073aa;">Итого с покраской: <b>${grandTotal.toFixed(2)} ₽</b></strong>`;
+1768:         html += `<strong style="font-size: 1.2em; color: #0073aa;">Итого: <b>${materialPrice.toFixed(2)} ₽</b></strong>`;
+1771:     rmResult.innerHTML = html;
+1773:     <?php if ($show_falsebalk_calculator): ?>
+1774:     createHiddenField('custom_rm_shape', selectedShape.value);
+1775:     createHiddenField('custom_rm_shape_label', shapeLabel);
+1776:     createHiddenField('custom_rm_width', widthValue || 0);
+1777:     createHiddenField('custom_rm_height', heightValue || 0);
+1778:     if (selectedShape.value === 'p' && height2Value > 0) {
+1779:         createHiddenField('custom_rm_height2', height2Value);
+1782:     createHiddenField('custom_rm_width', widthValue || 0);
+1785:     createHiddenField('custom_rm_length', lengthValue);
+1786:     createHiddenField('custom_rm_quantity', quantity);
+1787:     createHiddenField('custom_rm_total_length', totalLength.toFixed(2));
+1788:     createHiddenField('custom_rm_painting_area', paintingArea.toFixed(3));
+1789:     createHiddenField('custom_rm_multiplier', priceMultiplier);
+1790:     createHiddenField('custom_rm_price', materialPrice.toFixed(2));
+1791:     createHiddenField('custom_rm_grand_total', grandTotal.toFixed(2));
+1794: if (rmWidthEl) rmWidthEl.addEventListener('change', updateRunningMeterCalc);
+1795: if (rmLengthEl) rmLengthEl.addEventListener('change', updateRunningMeterCalc);
+1797: if (quantityInput) {
+1798:     quantityInput.addEventListener('input', function() {
+1799:         if (!isAutoUpdate && rmLengthEl && rmLengthEl.value) {
+1800:             updateRunningMeterCalc();
+1804:     quantityInput.addEventListener('change', function() {
+1805:         if (!isAutoUpdate && rmLengthEl && rmLengthEl.value) {
+1806:             updateRunningMeterCalc();
+1811: console.log('✓ Running meter calculator fully initialized');
+1817:         <?php if($is_square_meter && !$is_running_meter): ?>
+1819:         const sqMeterCalc = document.createElement('div');
+1820:         sqMeterCalc.id = 'calc-square-meter';
+1822:         let sqCalcHTML = '<br><h4>Калькулятор стоимости</h4>';
+1824:         sqCalcHTML += '<div style="display:flex;gap:20px;flex-wrap:wrap;align-items: center;">';
+1827:         if (calcSettings && calcSettings.width_min > 0 && calcSettings.width_max > 0) {
+1828:             sqCalcHTML += `<label>Ширина (мм): 
+1829:                 <select id="sq_width" style="background:#fff;margin-left:10px;">
+1830:                     <option value="">Выберите...</option>`;
+1831:             for (let w = calcSettings.width_min; w <= calcSettings.width_max; w += calcSettings.width_step) {
+1832:                 sqCalcHTML += `<option value="${w}">${w}</option>`;
+1834:             sqCalcHTML += `</select></label>`;
+1836:             sqCalcHTML += `<label>Ширина (мм): 
+1837:                 <input type="number" id="sq_width" min="1" step="100" placeholder="1000" style="width:100px; margin-left:10px;background:#fff">
+1843: if (calcSettings && calcSettings.length_min > 0 && calcSettings.length_max > 0) {
+1844:     calcHTML += `<label>Длина (м) 001: 
+1845:         <select id="mult_length" min="0.01" step="0.01"  style="margin-left:10px;background:#fff;">
+1846:             <option value="">Выберите...</option>`;
+1849:     const lengthMin = calcSettings.length_min;
+1850:     const lengthMax = calcSettings.length_max;
+1851:     const lengthStep = calcSettings.length_step;
+1854:     const stepsCount = Math.round((lengthMax - lengthMin) / lengthStep) + 1;
+1856:     for (let i = 0; i < stepsCount; i++) {
+1857:         const value = lengthMin + (i * lengthStep);
+1859:         const displayValue = value.toFixed(2);
+1860:         calcHTML += `<option value="${displayValue}">${displayValue}</option>`;
+1863:     calcHTML += `</select></label>`;
+1865:     calcHTML += `<label>Длина (м): 
+1866:         <input type="number" id="mult_length" min="0.01" step="0.01" placeholder="0.01" style="width:100px; margin-left:10px;background:#fff">
+1871:         sqCalcHTML += '</div><div id="calc_sq_result" style="margin-top:10px; font-size:1.3em"></div>';
+1872:         sqMeterCalc.innerHTML = sqCalcHTML;
+1873:         resultBlock.appendChild(sqMeterCalc);
+1877:             sqMeterCalc.appendChild(paintingBlock);
+1880:         const sqWidthEl = document.getElementById('sq_width');
+1881:         const sqLengthEl = document.getElementById('sq_length');
+1882:         const sqQuantityDisplay = document.getElementById('sq_quantity_display');
+1883:         const sqResult = document.getElementById('calc_sq_result');
+1884:         const basePriceSQ = <?php echo floatval($product->get_price()); ?>;
+1886:         function updateSquareMeterCalc() {
+1887:             const widthValue = parseFloat(sqWidthEl.value);
+1888:             const lengthValue = parseFloat(sqLengthEl.value);
+1890:             const quantity = (quantityInput && !isNaN(parseInt(quantityInput.value))) ? parseInt(quantityInput.value) : 1;
+1891:             sqQuantityDisplay.textContent = quantity;
+1893:             if (!widthValue || widthValue <= 0 || !lengthValue || lengthValue <= 0) {
+1894:                 sqResult.innerHTML = '';
+1895:                 removeHiddenFields('custom_sq_');
+1896:                 updatePaintingServiceCost(0);
+1900:             const width_m = widthValue / 1000;
+1901:             const length_m = lengthValue;
+1903:             const areaPerItem = width_m * length_m;
+1904:             const totalArea = areaPerItem * quantity;
+1905:             const pricePerItem = areaPerItem * basePriceSQ;
+1906:             const materialPrice = pricePerItem * quantity;
+1908:             const paintingCost = updatePaintingServiceCost(totalArea);
+1909:             const grandTotal = materialPrice + paintingCost;
+1911:             let html = `Площадь 1 шт: <b>${areaPerItem.toFixed(3)} м²</b><br>`;
+1912:             html += `Общая площадь: <b>${totalArea.toFixed(3)} м²</b> (${quantity} шт)<br>`;
+1913:             html += `Цена за 1 шт: <b>${pricePerItem.toFixed(2)} ₽</b>`;
+1914:             html += '<br>';
+1915:             html += `Стоимость материала: <b>${materialPrice.toFixed(2)} ₽</b><br>`;
+1917:             if (paintingCost > 0) {
+1918:                 html += `Стоимость покраски: <b>${paintingCost.toFixed(2)} ₽</b><br>`;
+1919:                 html += `<strong>Итого с покраской: <b>${grandTotal.toFixed(2)} ₽</b></strong>`;
+1921:                 html += `<strong>Итого: <b>${materialPrice.toFixed(2)} ₽</b></strong>`;
+1924:             sqResult.innerHTML = html;
+1926:             createHiddenField('custom_sq_width', widthValue);
+1927:             createHiddenField('custom_sq_length', lengthValue);
+1928:             createHiddenField('custom_sq_quantity', quantity);
+1929:             createHiddenField('custom_sq_area_per_item', areaPerItem.toFixed(3));
+1930:             createHiddenField('custom_sq_total_area', totalArea.toFixed(3));
+1931:             createHiddenField('custom_sq_multiplier', priceMultiplier);
+1932:             createHiddenField('custom_sq_price', materialPrice.toFixed(2));
+1933:             createHiddenField('custom_sq_grand_total', grandTotal.toFixed(2));
+1936:         sqWidthEl.addEventListener('change', updateSquareMeterCalc);
+1937:         sqLengthEl.addEventListener('change', updateSquareMeterCalc);
+1940:         if (quantityInput) {
+1941:             quantityInput.addEventListener('input', function() {
+1942:                 if (!isAutoUpdate && sqWidthEl.value && sqLengthEl.value) {
+1943:                     updateSquareMeterCalc();
+1951: }, 20);
+1970: add_filter('woocommerce_add_cart_item_data', function($cart_item_data, $product_id, $variation_id){
+1980:     if (!$product) return $cart_item_data;
+1983:     $pack_area = extract_area_with_qty($title, $product_id);
+1984:     $base_price_m2 = floatval($product->get_regular_price() ?: $product->get_price());
+1988:     $leaf_children = [191, 127, 94];
+1989:     $leaf_ids = array_merge([$leaf_parent_id], $leaf_children);
+1990:     $is_leaf_category = has_term($leaf_ids, 'product_cat', $product_id);
+1993:     $painting_service = null;
+1994:     if (!empty($_POST['painting_service_key'])) {
+1995:         $painting_service = [
+1996:             'key' => sanitize_text_field($_POST['painting_service_key']),
+1997:             'name' => sanitize_text_field($_POST['painting_service_name']),
+1998:             'price_per_m2' => floatval($_POST['painting_service_price_per_m2']),
+1999:             'area' => floatval($_POST['painting_service_area']),
+2000:             'total_cost' => floatval($_POST['painting_service_total_cost'])
+2005:             $color_filename = sanitize_text_field($_POST['pm_selected_color_filename']);
+2006:             $painting_service['color_filename'] = $color_filename;
+2007:             $painting_service['name_with_color'] = $painting_service['name'] . ' (' . $color_filename . ')';
+2022:         $cart_item_data['pm_selected_color'] = sanitize_text_field($_POST['pm_selected_color_filename']);
+2028:     if (!empty($_POST['custom_area_packs']) && !empty($_POST['custom_area_area_value'])) {
+2029:         $cart_item_data['custom_area_calc'] = [
+2032:             'total_price' => floatval($_POST['custom_area_total_price']),
+2033:             'grand_total' => floatval($_POST['custom_area_grand_total'] ?? $_POST['custom_area_total_price']),
+2034:             'is_leaf' => $is_leaf_category,
+2035:             'painting_service' => $painting_service
+2041:     if (!empty($_POST['custom_width_val']) && !empty($_POST['custom_length_val'])) {
+2042:         $cart_item_data['custom_dimensions'] = [
+2043:             'width' => intval($_POST['custom_width_val']),
+2044:             'length'=> intval($_POST['custom_length_val']),
+2045:             'price'=> floatval($_POST['custom_dim_price']),
+2046:             'grand_total' => floatval($_POST['custom_dim_grand_total'] ?? $_POST['custom_dim_price']),
+2047:             'is_leaf' => $is_leaf_category,
+2048:             'painting_service' => $painting_service
+2054:     if (!empty($_POST['custom_mult_width']) && !empty($_POST['custom_mult_length'])) {
+2055:         error_log('Adding multiplier calc to cart: ' . print_r($_POST, true));
+2057:         $cart_item_data['custom_multiplier_calc'] = [
+2060:             'quantity' => intval($_POST['custom_mult_quantity'] ?? 1),
+2061:             'area_per_item' => floatval($_POST['custom_mult_area_per_item']),
+2062:             'total_area' => floatval($_POST['custom_mult_total_area']),
+2063:             'multiplier' => floatval($_POST['custom_mult_multiplier']),
+2064:             'price' => floatval($_POST['custom_mult_price']),
+2065:             'grand_total' => floatval($_POST['custom_mult_grand_total'] ?? $_POST['custom_mult_price']),
+2066:             'painting_service' => $painting_service
+2069:         error_log('Multiplier calc data: ' . print_r($cart_item_data['custom_multiplier_calc'], true));
+2074:     if (!empty($_POST['custom_rm_length'])) {
+2075:         $rm_data = [
+2076:             'width' => floatval($_POST['custom_rm_width'] ?? 0),
+2078:             'quantity' => intval($_POST['custom_rm_quantity'] ?? 1),
+2079:             'total_length' => floatval($_POST['custom_rm_total_length']),
+2080:             'painting_area' => floatval($_POST['custom_rm_painting_area'] ?? 0),
+2081:             'multiplier' => floatval($_POST['custom_rm_multiplier'] ?? 1),
+2082:             'price' => floatval($_POST['custom_rm_price']),
+2083:             'grand_total' => floatval($_POST['custom_rm_grand_total'] ?? $_POST['custom_rm_price']),
+2084:             'painting_service' => $painting_service
+2088:         if (!empty($_POST['custom_rm_shape'])) {
+2089:             $rm_data['shape'] = sanitize_text_field($_POST['custom_rm_shape']);
+2090:             $rm_data['shape_label'] = sanitize_text_field($_POST['custom_rm_shape_label']);
+2091:             $rm_data['height'] = floatval($_POST['custom_rm_height'] ?? 0);
+2094:         $cart_item_data['custom_running_meter_calc'] = $rm_data;
+2095:         error_log('PM: Added running meter calc to cart - ' . print_r($rm_data, true));
+2100:     if (!empty($_POST['custom_sq_width']) && !empty($_POST['custom_sq_length'])) {
+2101:         $cart_item_data['custom_square_meter_calc'] = [
+2104:             'quantity' => intval($_POST['custom_sq_quantity'] ?? 1),
+2105:             'area_per_item' => floatval($_POST['custom_sq_area_per_item']),
+2106:             'total_area' => floatval($_POST['custom_sq_total_area']),
+2107:             'multiplier' => floatval($_POST['custom_sq_multiplier'] ?? 1),
+2108:             'price' => floatval($_POST['custom_sq_price']),
+2109:             'grand_total' => floatval($_POST['custom_sq_grand_total'] ?? $_POST['custom_sq_price']),
+2110:             'painting_service' => $painting_service
+2116:     if (!empty($_POST['card_purchase']) && $_POST['card_purchase'] === '1' && $pack_area > 0) {
+2117:         $cart_item_data['card_pack_purchase'] = [
+2118:             'area' => $pack_area,
+2119:             'price_per_m2' => $base_price_m2,
+2120:             'total_price' => $base_price_m2 * $pack_area,
+2121:             'is_leaf' => $is_leaf_category,
+2122:             'unit_type' => $is_leaf_category ? 'лист' : 'упаковка',
+2123:             'painting_service' => $painting_service
+2129:     if ($pack_area > 0) {
+2130:         $cart_item_data['standard_pack_purchase'] = [
+2131:             'area' => $pack_area,
+2132:             'price_per_m2' => $base_price_m2,
+2133:             'total_price' => $base_price_m2 * $pack_area,
+2134:             'is_leaf' => $is_leaf_category,
+2135:             'unit_type' => $is_leaf_category ? 'лист' : 'упаковка',
+2136:             'painting_service' => $painting_service
+2146: add_filter('woocommerce_get_item_data', function($item_data, $cart_item){
+2148:     if (!empty($cart_item['pm_selected_scheme_name'])) {
+2149:         $item_data[] = [
+2154:     if (!empty($cart_item['pm_selected_color'])) {
+2155:         $color_display = $cart_item['pm_selected_color'];
+2158:         if (!empty($cart_item['pm_selected_color_image'])) {
+2159:             $image_url = $cart_item['pm_selected_color_image'];
+2160:             $filename = !empty($cart_item['pm_selected_color_filename']) ? $cart_item['pm_selected_color_filename'] : '';
+2162:             $color_display = '<div style="display:flex; align-items:center; gap:10px;">';
+2163:             $color_display .= '<img src="' . esc_url($image_url) . '" alt="' . esc_attr($filename) . '" style="width:40px; height:40px; object-fit:cover; border:2px solid #ddd; border-radius:4px;">';
+2164:             $color_display .= '<div>';
+2165:             $color_display .= '<div>' . esc_html($cart_item['pm_selected_color']) . '</div>';
+2166:             if ($filename) {
+2167:                 $color_display .= '<div style="font-size:11px; color:#999;">Код: ' . esc_html($filename) . '</div>';
+2169:             $color_display .= '</div>';
+2170:             $color_display .= '</div>';
+2173:         $item_data[] = [
+2175:             'value' => $color_display
+2179:     if(isset($cart_item['custom_area_calc'])){
+2180:         $area_calc = $cart_item['custom_area_calc'];
+2181:         $is_leaf_category = $area_calc['is_leaf'];
+2182:         $unit_forms = $is_leaf_category ? ['лист', 'листа', 'листов'] : ['упаковка', 'упаковки', 'упаковок'];
+2184:         $plural = ($area_calc['packs'] % 10 === 1 && $area_calc['packs'] % 100 !== 11) ? $unit_forms[0] :
+2185:                   (($area_calc['packs'] % 10 >=2 && $area_calc['packs'] %10 <=4 && ($area_calc['packs'] %100 < 10 || $area_calc['packs'] %100 >= 20)) ? $unit_forms[1] : $unit_forms[2]);
+2187:         $display_text = $area_calc['area'] . ' м² (' . $area_calc['packs'] . ' ' . $plural . ') — ' . number_format($area_calc['total_price'], 2, '.', ' ') . ' ₽';
+2189:         if (isset($area_calc['painting_service']) && $area_calc['painting_service']) {
+2190:             $painting = $area_calc['painting_service'];
+2192:             $painting_name = isset($painting['name_with_color']) ? $painting['name_with_color'] : $painting['name'];
+2193:             $display_text .= '<br>+ ' . $painting_name . ' — ' . number_format($painting['total_cost'], 2, '.', ' ') . ' ₽';
+2196:         $item_data[] = [
+2197:             'name'=>'Выбранная площадь',
+2198:             'value'=> $display_text
+2202:     if(isset($cart_item['custom_dimensions'])){
+2203:         $dims = $cart_item['custom_dimensions'];
+2204:         $area = ($dims['width']/1000)*($dims['length']/1000);
+2206:         $display_text = $dims['width'].' мм × '.$dims['length'].' мм ('.round($area,3).' м²) — '.number_format($dims['price'], 2, '.', ' ').' ₽';
+2208:         if (isset($dims['painting_service']) && $dims['painting_service']) {
+2209:             $painting = $dims['painting_service'];
+2211:             $painting_name = isset($painting['name_with_color']) ? $painting['name_with_color'] : $painting['name'];
+2212:             $display_text .= '<br>+ ' . $painting_name . ' — ' . number_format($painting['total_cost'], 2, '.', ' ') . ' ₽';
+2215:         $item_data[] = [
+2216:             'name'=>'Размеры',
+2217:             'value'=> $display_text
+2222:     if(isset($cart_item['custom_running_meter_calc'])){
+2223:         $rm_calc = $cart_item['custom_running_meter_calc'];
+2225:         $display_text = '';
+2228:         if (isset($rm_calc['shape_label'])) {
+2229:             $display_text .= 'Форма: ' . $rm_calc['shape_label'] . '<br>';
+2230:             if ($rm_calc['width'] > 0) $display_text .= 'Ширина: ' . $rm_calc['width'] . ' мм<br>';
+2231:             if (isset($rm_calc['height']) && $rm_calc['height'] > 0) $display_text .= 'Высота: ' . $rm_calc['height'] . ' мм<br>';
+2232:         } elseif ($rm_calc['width'] > 0) {
+2233:             $display_text .= 'Ширина: ' . $rm_calc['width'] . ' мм<br>';
+2236:         $display_text .= 'Длина: ' . $rm_calc['length'] . ' м<br>';
+2237:         $display_text .= 'Общая длина: ' . $rm_calc['total_length'] . ' пог. м<br>';
+2238:         $display_text .= 'Стоимость: ' . number_format($rm_calc['price'], 2, '.', ' ') . ' ₽';
+2240:         if (isset($rm_calc['painting_service']) && $rm_calc['painting_service']) {
+2241:             $painting = $rm_calc['painting_service'];
+2242:             $painting_name = isset($painting['name_with_color']) ? $painting['name_with_color'] : $painting['name'];
+2243:             $display_text .= '<br>+ ' . $painting_name . ' — ' . number_format($painting['total_cost'], 2, '.', ' ') . ' ₽';
+2246:         $item_data[] = [
+2247:             'name'=>'Параметры',
+2248:             'value'=> $display_text
+2254:     if(isset($cart_item['card_pack_purchase'])){
+2255:         $pack_data = $cart_item['card_pack_purchase'];
+2256:         $display_text = 'Площадь: ' . $pack_data['area'] . ' м² — ' . number_format($pack_data['total_price'], 2, '.', ' ') . ' ₽';
+2258:         if (isset($pack_data['painting_service']) && $pack_data['painting_service']) {
+2259:             $painting = $pack_data['painting_service'];
+2261:             $painting_name = isset($painting['name_with_color']) ? $painting['name_with_color'] : $painting['name'];
+2262:             $display_text .= '<br>+ ' . $painting_name . ' — ' . number_format($painting['total_cost'], 2, '.', ' ') . ' ₽';
+2265:         $item_data[] = [
+2266:             'name' => 'В корзине ' . $pack_data['unit_type'],
+2267:             'value' => $display_text
+2272:     if(isset($cart_item['standard_pack_purchase'])){
+2273:         $pack_data = $cart_item['standard_pack_purchase'];
+2274:         $display_text = 'Площадь: ' . $pack_data['area'] . ' м² — ' . number_format($pack_data['total_price'], 2, '.', ' ') . ' ₽';
+2276:         if (isset($pack_data['painting_service']) && $pack_data['painting_service']) {
+2277:             $painting = $pack_data['painting_service'];
+2279:             $painting_name = isset($painting['name_with_color']) ? $painting['name_with_color'] : $painting['name'];
+2280:             $display_text .= '<br>+ ' . $painting_name . ' — ' . number_format($painting['total_cost'], 2, '.', ' ') . ' ₽';
+2283:         $item_data[] = [
+2284:             'name' => 'В корзине ' . $pack_data['unit_type'],
+2285:             'value' => $display_text
+2290: },10,2);
+2293: add_filter('woocommerce_add_to_cart_quantity', function($quantity, $product_id) {
+2294:     if (!is_in_target_categories($product_id)) return $quantity;
+2297:     if (isset($_POST['custom_area_packs']) && !empty($_POST['custom_area_packs']) && 
+2298:         isset($_POST['custom_area_area_value']) && !empty($_POST['custom_area_area_value'])) {
+2299:         return intval($_POST['custom_area_packs']);
+2303:     if (isset($_POST['custom_width_val']) && !empty($_POST['custom_width_val']) && 
+2304:         isset($_POST['custom_length_val']) && !empty($_POST['custom_length_val'])) {
+2309:     return $quantity;
+2313: add_action('woocommerce_add_to_cart', function($cart_item_key, $product_id, $quantity, $variation_id, $variation, $cart_item_data) {
+2314:     if (!is_in_target_categories($product_id)) return;
+2317:     if (isset($cart_item_data['custom_area_calc'])) {
+2318:         $packs = intval($cart_item_data['custom_area_calc']['packs']);
+2319:         if ($packs > 0 && $quantity !== $packs) {
+2320:             WC()->cart->set_quantity($cart_item_key, $packs);
+2323: }, 10, 6);
+2326: add_action('woocommerce_before_calculate_totals', function($cart){
+2327:     if(is_admin() && !defined('DOING_AJAX')) return;
+2328:     foreach($cart->get_cart() as $cart_item){
+2329:         $product = $cart_item['data'];
+2332:         if(isset($cart_item['custom_area_calc'])){
+2333:             $area_calc = $cart_item['custom_area_calc'];
+2334:             $base_price_m2 = floatval($product->get_regular_price() ?: $product->get_price());
+2335:             $pack_area = extract_area_with_qty($product->get_name(), $product->get_id());
+2336:             if($pack_area > 0) {
+2337:                 $price_per_pack = $base_price_m2 * $pack_area;
+2340:                 if (isset($area_calc['painting_service']) && $area_calc['painting_service']) {
+2341:                     $painting = $area_calc['painting_service'];
+2342:                     $painting_cost_per_pack = $painting['total_cost'] / $area_calc['packs'];
+2343:                     $price_per_pack += $painting_cost_per_pack;
+2346:                 $product->set_price($price_per_pack);
+2350:         elseif(isset($cart_item['custom_dimensions'])){
+2351:             $dims = $cart_item['custom_dimensions'];
+2352:             $total_price = $dims['price'];
+2355:             if (isset($dims['painting_service']) && $dims['painting_service']) {
+2356:                 $total_price += $dims['painting_service']['total_cost'];
+2359:             $product->set_price($total_price);
+2362:         elseif(isset($cart_item['custom_multiplier_calc'])){
+2363:             $mult_calc = $cart_item['custom_multiplier_calc'];
+2364:             $total_price = $mult_calc['price'];
+2366:             if (isset($mult_calc['painting_service']) && $mult_calc['painting_service']) {
+2367:                 $total_price += $mult_calc['painting_service']['total_cost'];
+2370:             $product->set_price($total_price);
+2373:         elseif(isset($cart_item['custom_running_meter_calc'])){
+2374:             $rm_calc = $cart_item['custom_running_meter_calc'];
+2375:             $total_price = $rm_calc['price'];
+2377:             if (isset($rm_calc['painting_service']) && $rm_calc['painting_service']) {
+2378:                 $total_price += $rm_calc['painting_service']['total_cost'];
+2381:             $product->set_price($total_price);
+2384:         elseif(isset($cart_item['custom_square_meter_calc'])){
+2385:             $sq_calc = $cart_item['custom_square_meter_calc'];
+2386:             $total_price = $sq_calc['price'];
+2388:             if (isset($sq_calc['painting_service']) && $sq_calc['painting_service']) {
+2389:                 $total_price += $sq_calc['painting_service']['total_cost'];
+2392:             $product->set_price($total_price);
+2395:         elseif(isset($cart_item['card_pack_purchase'])){
+2396:             $pack_data = $cart_item['card_pack_purchase'];
+2397:             $total_price = $pack_data['total_price'];
+2400:             if (isset($pack_data['painting_service']) && $pack_data['painting_service']) {
+2401:                 $total_price += $pack_data['painting_service']['total_cost'];
+2404:             $product->set_price($total_price);
+2407:         elseif(isset($cart_item['standard_pack_purchase'])){
+2408:             $pack_data = $cart_item['standard_pack_purchase'];
+2409:             $total_price = $pack_data['total_price'];
+2412:             if (isset($pack_data['painting_service']) && $pack_data['painting_service']) {
+2413:                 $total_price += $pack_data['painting_service']['total_cost'];
+2416:             $product->set_price($total_price);
+2422: add_action('woocommerce_checkout_create_order_line_item', function($item, $cart_item_key, $values, $order) {
+2424:     if (!empty($values['pm_selected_scheme_name'])) {
+2426:         $scheme_with_color = $values['pm_selected_scheme_name'];
+2428:         if (!empty($values['pm_selected_color_filename'])) {
+2429:             $scheme_with_color .= ' "' . $values['pm_selected_color_filename'] . '"';
+2432:         $item->add_meta_data('Схема покраски', $scheme_with_color, true);
+2439:     if (!empty($values['pm_selected_color_filename'])) {
+2440:         $item->add_meta_data('Код цвета', $values['pm_selected_color_filename'], true);
+2444:     if (isset($values['custom_area_calc']) && isset($values['custom_area_calc']['painting_service']) && $values['custom_area_calc']['painting_service']) {
+2445:         $painting = $values['custom_area_calc']['painting_service'];
+2446:         $painting_name = isset($painting['name_with_color']) ? $painting['name_with_color'] : $painting['name'];
+2447:         $item->add_meta_data('Услуга покраски', $painting_name . ' (' . $painting['area'] . ' м² × ' . $painting['price_per_m2'] . ' ₽/м²)', true);
+2451:     if (isset($values['custom_dimensions']) && isset($values['custom_dimensions']['painting_service']) && $values['custom_dimensions']['painting_service']) {
+2452:         $painting = $values['custom_dimensions']['painting_service'];
+2453:         $painting_name = isset($painting['name_with_color']) ? $painting['name_with_color'] : $painting['name'];
+2454:         $item->add_meta_data('Услуга покраски', $painting_name . ' (' . $painting['area'] . ' м² × ' . $painting['price_per_m2'] . ' ₽/м²)', true);
+2458:     if (isset($values['card_pack_purchase']) && isset($values['card_pack_purchase']['painting_service']) && $values['card_pack_purchase']['painting_service']) {
+2459:         $painting = $values['card_pack_purchase']['painting_service'];
+2460:         $painting_name = isset($painting['name_with_color']) ? $painting['name_with_color'] : $painting['name'];
+2461:         $item->add_meta_data('Услуга покраски', $painting_name . ' (' . $painting['area'] . ' м² × ' . $painting['price_per_m2'] . ' ₽/м²)', true);
+2465:     if (isset($values['standard_pack_purchase']) && isset($values['standard_pack_purchase']['painting_service']) && $values['standard_pack_purchase']['painting_service']) {
+2466:         $painting = $values['standard_pack_purchase']['painting_service'];
+2467:         $painting_name = isset($painting['name_with_color']) ? $painting['name_with_color'] : $painting['name'];
+2468:         $item->add_meta_data('Услуга покраски', $painting_name . ' (' . $painting['area'] . ' м² × ' . $painting['price_per_m2'] . ' ₽/м²)', true);
+2470: }, 10, 4);
+2473: add_filter('woocommerce_order_item_display_meta_key', function($display_key, $meta, $item) {
+2480: add_filter('woocommerce_order_item_display_meta_value', function($display_value, $meta, $item) {
+2483:         return '<img src="' . esc_url($image_url) . '" style="width:60px; height:60px; object-fit:cover; border:2px solid #ddd; border-radius:4px; display:block; margin-top:5px;">';
+2490: add_action('woocommerce_checkout_create_order_line_item', function($item, $cart_item_key, $values, $order) {
+2491:     $sources = ['custom_area_calc', 'custom_dimensions', 'card_pack_purchase', 'standard_pack_purchase'];
+2494:         if (!empty($values[$key]['painting_service'])) {
+2495:             $painting = $values[$key]['painting_service'];
+2498:             $painting_name = $painting['name_with_color'] ?? $painting['name'];
+2502:                 $color = $values['pm_selected_color'];
+2503:                 if (strpos($painting_name, $color) === false) {
+2504:                     $painting_name .= ' "' . $color . '"';
+2508:             $item->add_meta_data('Услуга покраски', $painting_name, true);
+2509:             break; // берём только первую найденную услугу
+2516: }, 10, 4);
+2522: add_filter('woocommerce_add_cart_item_data', function($cart_item_data, $product_id, $variation_id){
+2523:     $sources = ['custom_area_calc', 'custom_dimensions', 'card_pack_purchase', 'standard_pack_purchase'];
+2528:             $color = '';
+2530:                 $color = sanitize_text_field($_POST['pm_selected_color_filename']);
+2532:                 $color = sanitize_text_field($_POST['pm_selected_color']);
+2534:                 if (filter_var($color, FILTER_VALIDATE_URL)) {
+2535:                     $color = pathinfo($color, PATHINFO_FILENAME);
+2536:                     $color = preg_replace('/(_180|-1)$/', '', $color);
+2540:             if ($color) {
+2542:                 $cart_item_data[$key]['painting_service']['name_with_color'] = $cart_item_data[$key]['painting_service']['name'] . ' "' . $color . '"';
+2544:                 $cart_item_data['pm_selected_color'] = $color;
+2560: function register_painting_services_acf_fields() {
+2561:     if (!function_exists('acf_add_local_field_group')) return;
+2564:     acf_add_local_field_group(array(
+2565:         'key' => 'group_painting_services_category',
+2566:         'title' => 'Услуги покраски для категории',
+2567:         'fields' => array(
+2569:                 'key' => 'field_dop_uslugi_category',
+2570:                 'label' => 'Доступные услуги покраски',
+2571:                 'name' => 'dop_uslugi',
+2573:                 'instructions' => 'Настройте доступные виды покраски для этой категории товаров',
+2574:                 'required' => 0,
+2575:                 'conditional_logic' => 0,
+2576:                 'wrapper' => array(
+2577:                     'width' => '',
+2578:                     'class' => '',
+2579:                     'id' => '',
+2581:                 'collapsed' => 'field_name_usluga_category',
+2582:                 'min' => 0,
+2583:                 'max' => 0,
+2585:                 'button_label' => 'Добавить услугу покраски',
+2586:                 'sub_fields' => array(
+2588:                         'key' => 'field_name_usluga_category',
+2589:                         'label' => 'Название услуги',
+2590:                         'name' => 'name_usluga',
+2592:                         'instructions' => '',
+2594:                         'conditional_logic' => 0,
+2595:                         'wrapper' => array(
+2596:                             'width' => '70',
+2597:                             'class' => '',
+2598:                             'id' => '',
+2600:                         'default_value' => '',
+2601:                         'placeholder' => 'Например: Покраска натуральным маслом',
+2602:                         'prepend' => '',
+2603:                         'append' => '',
+2604:                         'maxlength' => '',
+2607:                         'key' => 'field_price_usluga_category',
+2608:                         'label' => 'Цена (руб/м²)',
+2609:                         'name' => 'price_usluga',
+2611:                         'instructions' => '',
+2613:                         'conditional_logic' => 0,
+2614:                         'wrapper' => array(
+2615:                             'width' => '30',
+2616:                             'class' => '',
+2617:                             'id' => '',
+2619:                         'default_value' => '',
+2620:                         'placeholder' => '650',
+2621:                         'prepend' => '',
+2622:                         'append' => 'руб/м²',
+2623:                         'min' => 0,
+2624:                         'max' => '',
+2625:                         'step' => 50,
+2630:         'location' => array(
+2633:                     'param' => 'taxonomy',
+2635:                     'value' => 'product_cat',
+2639:         'menu_order' => 0,
+2640:         'position' => 'normal',
+2641:         'style' => 'default',
+2642:         'label_placement' => 'top',
+2643:         'instruction_placement' => 'label',
+2644:         'hide_on_screen' => '',
+2645:         'active' => true,
+2646:         'description' => '',
+2650:     acf_add_local_field_group(array(
+2651:         'key' => 'group_painting_services_product',
+2652:         'title' => 'Индивидуальные услуги покраски',
+2653:         'fields' => array(
+2655:                 'key' => 'field_use_individual_services',
+2656:                 'label' => 'Использовать индивидуальные услуги',
+2657:                 'name' => 'use_individual_services',
+2659:                 'instructions' => 'Включите, если хотите настроить услуги покраски индивидуально для этого товара, игнорируя настройки категории',
+2660:                 'required' => 0,
+2661:                 'conditional_logic' => 0,
+2662:                 'wrapper' => array(
+2663:                     'width' => '',
+2664:                     'class' => '',
+2665:                     'id' => '',
+2667:                 'message' => '',
+2668:                 'default_value' => 0,
+2669:                 'ui' => 1,
+2670:                 'ui_on_text' => 'Да',
+2671:                 'ui_off_text' => 'Нет',
+2674:                 'key' => 'field_dop_uslugi_product',
+2675:                 'label' => 'Услуги покраски для товара',
+2676:                 'name' => 'dop_uslugi',
+2678:                 'instructions' => 'Настройте индивидуальные услуги покраски для этого товара',
+2679:                 'required' => 0,
+2680:                 'conditional_logic' => array(
+2683:                             'field' => 'field_use_individual_services',
+2685:                             'value' => '1',
+2689:                 'wrapper' => array(
+2690:                     'width' => '',
+2691:                     'class' => '',
+2692:                     'id' => '',
+2694:                 'collapsed' => 'field_name_usluga_product',
+2695:                 'min' => 0,
+2696:                 'max' => 0,
+2698:                 'button_label' => 'Добавить услугу покраски',
+2699:                 'sub_fields' => array(
+2701:                         'key' => 'field_name_usluga_product',
+2702:                         'label' => 'Название услуги',
+2703:                         'name' => 'name_usluga',
+2705:                         'instructions' => '',
+2707:                         'conditional_logic' => 0,
+2708:                         'wrapper' => array(
+2709:                             'width' => '70',
+2710:                             'class' => '',
+2711:                             'id' => '',
+2713:                         'default_value' => '',
+2714:                         'placeholder' => 'Например: Покраска натуральным маслом',
+2715:                         'prepend' => '',
+2716:                         'append' => '',
+2717:                         'maxlength' => '',
+2720:                         'key' => 'field_price_usluga_product',
+2721:                         'label' => 'Цена (руб/м²)',
+2722:                         'name' => 'price_usluga',
+2724:                         'instructions' => '',
+2726:                         'conditional_logic' => 0,
+2727:                         'wrapper' => array(
+2728:                             'width' => '30',
+2729:                             'class' => '',
+2730:                             'id' => '',
+2732:                         'default_value' => '',
+2733:                         'placeholder' => '650',
+2734:                         'prepend' => '',
+2735:                         'append' => 'руб/м²',
+2736:                         'min' => 0,
+2737:                         'max' => '',
+2738:                         'step' => 50,
+2743:         'location' => array(
+2746:                     'param' => 'post_type',
+2748:                     'value' => 'product',
+2752:         'menu_order' => 20,
+2753:         'position' => 'normal',
+2754:         'style' => 'default',
+2755:         'label_placement' => 'top',
+2756:         'instruction_placement' => 'label',
+2757:         'hide_on_screen' => '',
+2758:         'active' => true,
+2759:         'description' => '',
+2763:     acf_add_local_field_group(array(
+2764:         'key' => 'group_global_painting_services',
+2765:         'title' => 'Глобальные услуги покраски',
+2766:         'fields' => array(
+2768:                 'key' => 'field_dop_uslugi_global',
+2769:                 'label' => 'Услуги покраски по умолчанию',
+2770:                 'name' => 'global_dop_uslugi',
+2772:                 'instructions' => 'Услуги покраски по умолчанию (используются, если не настроены для категории или товара)',
+2773:                 'required' => 0,
+2774:                 'conditional_logic' => 0,
+2775:                 'wrapper' => array(
+2776:                     'width' => '',
+2777:                     'class' => '',
+2778:                     'id' => '',
+2780:                 'collapsed' => 'field_name_usluga_global',
+2781:                 'min' => 0,
+2782:                 'max' => 0,
+2784:                 'button_label' => 'Добавить услугу покраски',
+2785:                 'sub_fields' => array(
+2787:                         'key' => 'field_name_usluga_global',
+2788:                         'label' => 'Название услуги',
+2789:                         'name' => 'name_usluga',
+2792:                         'wrapper' => array('width' => '70'),
+2793:                         'placeholder' => 'Например: Покраска натуральным маслом',
+2796:                         'key' => 'field_price_usluga_global',
+2797:                         'label' => 'Цена (руб/м²)',
+2798:                         'name' => 'price_usluga',
+2801:                         'wrapper' => array('width' => '30'),
+2802:                         'placeholder' => '650',
+2803:                         'append' => 'руб/м²',
+2804:                         'min' => 0,
+2805:                         'step' => 50,
+2810:         'location' => array(
+2815:                     'value' => 'theme-general-settings',
+2819:         'menu_order' => 0,
+2820:         'position' => 'normal',
+2821:         'style' => 'default',
+2822:         'label_placement' => 'top',
+2823:         'instruction_placement' => 'label',
+2824:         'hide_on_screen' => '',
+2825:         'active' => true,
+2828: add_action('acf/init', 'register_painting_services_acf_fields');
+2831: function create_theme_options_page() {
+2832:     if (function_exists('acf_add_options_page')) {
+2833:         acf_add_options_page(array(
+2834:             'page_title' => 'Настройки услуг покраски',
+2835:             'menu_title' => 'Услуги покраски',
+2836:             'menu_slug' => 'theme-general-settings',
+2837:             'capability' => 'edit_posts',
+2838:             'icon_url' => 'dashicons-art',
+2839:             'position' => 30,
+2843: add_action('acf/init', 'create_theme_options_page');
+2848:     $use_individual = get_field('use_individual_services', $product_id);
+2849:     if ($use_individual) {
+2851:         if (!empty($services)) {
+2852:             error_log("Using INDIVIDUAL painting services for product {$product_id}");
+2853:             return $services;
+2858:     $product_categories = wp_get_post_terms($product_id, 'product_cat', ['fields' => 'all']);
+2859:     if (!is_wp_error($product_categories) && !empty($product_categories)) {
+2862:         usort($product_categories, function($a, $b) {
+2863:             $depth_a = count(get_ancestors($a->term_id, 'product_cat'));
+2864:             $depth_b = count(get_ancestors($b->term_id, 'product_cat'));
+2865:             return $depth_b - $depth_a; // От более вложенных к менее вложенным
+2869:         foreach ($product_categories as $category) {
+2870:             $services = get_field('dop_uslugi', 'product_cat_' . $category->term_id);
+2871:             if (!empty($services)) {
+2872:                 error_log("Using painting services from category: {$category->name} (ID: {$category->term_id}, depth: " . count(get_ancestors($category->term_id, 'product_cat')) . ")");
+2873:                 return $services;
+2879:     $global_services = get_field('global_dop_uslugi', 'option');
+2880:     if (!empty($global_services)) {
+2881:         error_log("Using GLOBAL painting services for product {$product_id}");
+2882:         return $global_services;
+2886:     error_log("No painting services found for product {$product_id}");
+2891: function get_available_painting_services_by_material($product_id) {
+2892:     $acf_services = get_acf_painting_services($product_id);
+2893:     $formatted_services = [];
+2895:     foreach ($acf_services as $index => $service) {
+2896:         $key = 'service_' . sanitize_title($service['name_usluga']);
+2897:         $formatted_services[$key] = [
+2898:             'name' => $service['name_usluga'],
+2899:             'price' => floatval($service['price_usluga'])
+2903:     return $formatted_services;
+2907: function populate_default_painting_services() {
+2908:     $default_services = [
+2909:         ['name_usluga' => 'Покраска натуральным маслом', 'price_usluga' => 1700],
+2910:         ['name_usluga' => 'Покраска Воском', 'price_usluga' => 650],
+2911:         ['name_usluga' => 'Покраска Укрывная', 'price_usluga' => 650],
+2912:         ['name_usluga' => 'Покраска Гидромаслом', 'price_usluga' => 1050],
+2913:         ['name_usluga' => 'Покраска Лаком', 'price_usluga' => 650],
+2914:         ['name_usluga' => 'Покраска Лазурью', 'price_usluga' => 650],
+2915:         ['name_usluga' => 'Покраска Винтаж', 'price_usluga' => 1050],
+2916:         ['name_usluga' => 'Покраска Пропиткой', 'price_usluga' => 650],
+2919:     update_field('global_dop_uslugi', $default_services, 'option');
+2939: add_action('wp_footer', function() {
+2941:     if (is_product()) return;
+2946:         function processButtons() {
+2947:             const buyButtons = document.querySelectorAll('a.add_to_cart_button:not(.product_type_variable), .add_to_cart_button:not(.product_type_variable), a[data-product_id]:not(.product_type_variable)');
+2949:             buyButtons.forEach(function(button) {
+2951:                 if (button.dataset.cardProcessed) return;
+2952:                 button.dataset.cardProcessed = 'true';
+2954:                 const productId = button.dataset.product_id || button.getAttribute('data-product_id');
+2955:                 if (!productId) return;
+2958:                 const form = document.createElement('form');
+2959:                 form.style.display = 'none';
+2960:                 form.method = 'POST';
+2961:                 form.action = button.href || window.location.href;
+2964:                 const fields = [
+2965:                     { name: 'add-to-cart', value: productId },
+2966:                     { name: 'product_id', value: productId },
+2967:                     { name: 'card_purchase', value: '1' }
+2970:                 fields.forEach(field => {
+2971:                     const input = document.createElement('input');
+2972:                     input.type = 'hidden';
+2973:                     input.name = field.name;
+2974:                     input.value = field.value;
+2975:                     form.appendChild(input);
+2978:                 document.body.appendChild(form);
+2981:                 button.addEventListener('click', function(e) {
+2982:                     e.preventDefault();
+2983:                     e.stopPropagation();
+2986:                     form.submit();
+2992:         processButtons();
+2995:         setTimeout(processButtons, 1000);
+2998:         const observer = new MutationObserver(function(mutations) {
+2999:             mutations.forEach(function(mutation) {
+3000:                 if (mutation.addedNodes.length > 0) {
+3001:                     processButtons();
+3006:         observer.observe(document.body, {
+3007:             childList: true,
+3008:             subtree: true
+3024: function get_russian_plural_for_cart($n, $forms) {
+3025:     $n = abs($n);
+3026:     $n %= 100;
+3027:     if ($n > 10 && $n < 20) return $forms[2];
+3028:     $n %= 10;
+3029:     if ($n === 1) return $forms[0];
+3030:     if ($n >= 2 && $n <= 4) return $forms[1];
+3031:     return $forms[2];
+3038: add_filter('woocommerce_cart_item_price', function($price, $cart_item, $cart_item_key) {
+3039:     $product = $cart_item['data'];
+3048:     if (isset($cart_item['card_pack_purchase']) || 
+3050:         isset($cart_item['custom_dimensions'])) {
+3052:         $base_price_m2 = floatval($product->get_regular_price() ?: $product->get_price());
+3053:         $current_price = floatval($product->get_price());
+3057:         $leaf_children = [191, 127, 94];
+3058:         $leaf_ids = array_merge([$leaf_parent_id], $leaf_children);
+3059:         $is_leaf_category = has_term($leaf_ids, 'product_cat', $product_id);
+3060:         $unit_text = $is_leaf_category ? 'лист' : 'упаковка';
+3063:         return wc_price($current_price) . ' за ' . $unit_text . '<br>' .
+3064:                '<small style="color: #666;">' . wc_price($base_price_m2) . ' за м²</small>';
+3071: add_filter('woocommerce_cart_item_subtotal', function($subtotal, $cart_item, $cart_item_key) {
+3072:     $product = $cart_item['data'];
+3081:     if (isset($cart_item['card_pack_purchase']) || 
+3083:         isset($cart_item['custom_dimensions'])) {
+3085:         $quantity = $cart_item['quantity'];
+3086:         $current_price = floatval($product->get_price());
+3087:         $total = $current_price * $quantity;
+3091:         $leaf_children = [191, 127, 94];
+3092:         $leaf_ids = array_merge([$leaf_parent_id], $leaf_children);
+3093:         $is_leaf_category = has_term($leaf_ids, 'product_cat', $product_id);
+3094:         $unit_forms = $is_leaf_category ? ['лист', 'листа', 'листов'] : ['упаковка', 'упаковки', 'упаковок'];
+3096:         $plural = get_russian_plural_for_cart($quantity, $unit_forms);
+3099:         return '<strong>' . wc_price($total) . '</strong><br>' .
+3100:                '<small style="color: #666;">' . $quantity . ' ' . $plural . '</small>';
+3107: add_filter('woocommerce_widget_cart_item_quantity', function($quantity, $cart_item, $cart_item_key) {
+3108:     $product = $cart_item['data'];
+3113:         return $quantity;
+3117:     if (isset($cart_item['card_pack_purchase']) || 
+3119:         isset($cart_item['custom_dimensions'])) {
+3121:         $qty = $cart_item['quantity'];
+3122:         $current_price = floatval($product->get_price());
+3123:         $base_price_m2 = floatval($product->get_regular_price() ?: $product->get_price());
+3127:         $leaf_children = [191, 127, 94];
+3128:         $leaf_ids = array_merge([$leaf_parent_id], $leaf_children);
+3129:         $is_leaf_category = has_term($leaf_ids, 'product_cat', $product_id);
+3130:         $unit_forms = $is_leaf_category ? ['лист', 'листа', 'листов'] : ['упаковка', 'упаковки', 'упаковок'];
+3132:         $plural = get_russian_plural_for_cart($qty, $unit_forms);
+3135:         return '<span class="quantity">' . $qty . ' ' . $plural . ' × ' . wc_price($current_price) . '</span><br>' .
+3136:                '<small style="color: #999; font-size: 0.9em;">(' . wc_price($base_price_m2) . ' за м²)</small>';
+3139:     return $quantity;
+3142: require_once get_stylesheet_directory() . '/inc/pm-paint-schemes.php';
+3160: add_filter( 'woocommerce_account_menu_items', 'remove_my_account_downloads', 999 );
+3161: function remove_my_account_downloads( $items ) {
+3162:     unset( $items['downloads'] );
+3167: add_filter( 'woocommerce_account_menu_items', function( $items ) {
+3168:     if ( isset( $items['edit-address'] ) ) {
+3175: add_filter( 'woocommerce_my_account_my_address_title', function( $title, $address_type, $customer_id ) {
+3176:     if ( $address_type === 'billing' ) {
+3179:     if ( $address_type === 'shipping' ) {
+3183: }, 10, 3 );
+3186: add_filter( 'woocommerce_my_account_get_addresses', function( $addresses, $customer_id ) {
+3187:     unset( $addresses['billing'] ); 
+3189: }, 10, 2 );
+3192: function wc_product_count_by_cat_id($atts) {
+3193:     $atts = shortcode_atts( array(
+3195:     ), $atts, 'wc_cat_count_id' );
+3197:     $cat_id = intval($atts['id']);
+3198:     if ($cat_id <= 0) return '';
+3201:     if (!$term || is_wp_error($term)) return '';
+3203:     $count = $term->count;
+3205:     return ($count > 0) ? $count : 'нет';
+3207: add_shortcode('wc_cat_count_id', 'wc_product_count_by_cat_id');
+3212: add_filter( 'woocommerce_account_menu_items', function( $items ) {
+3213:     if ( isset( $items['edit-account'] ) ) {
+3214:         $items['edit-account'] = 'Мои данные';
+3217:     if ( isset( $items['orders'] ) ) {
+3218:         unset( $items['orders'] );
+3221:     $items['cart'] = 'Корзина';
+3222:     $items['orders'] = 'Мои заказы';
+3228: add_action( 'init', function() {
+3229:     add_rewrite_endpoint( 'cart', EP_ROOT | EP_PAGES );
+3233: add_action( 'woocommerce_account_cart_endpoint', function() {
+3238: add_action( 'woocommerce_edit_account_form', function() {
+3240:     $client_type = get_user_meta( $user_id, 'client_type', true );
+3242:     $fields = [
+3243:         'billing_full_name'      => 'Полное наименование (или ФИО предпринимателя)',
+3244:         'billing_short_name'     => 'Краткое наименование',
+3245:         'billing_legal_address'  => 'Юридический адрес',
+3246:         'billing_fact_address'   => 'Фактический адрес',
+3247:         'billing_inn'            => 'ИНН',
+3248:         'billing_kpp'            => 'КПП (только для юрлиц)',
+3249:         'billing_ogrn'           => 'ОГРН / ОГРНИП',
+3250:         'billing_director'       => 'Должность и ФИО руководителя',
+3251:         'billing_buh'            => 'ФИО главного бухгалтера',
+3252:         'billing_dover'          => 'Лицо по доверенности',
+3253:         'billing_bank'           => 'Наименование банка',
+3254:         'billing_bik'            => 'БИК',
+3255:         'billing_korr'           => 'Корреспондентский счёт',
+3256:         'billing_rs'             => 'Расчётный счёт',
+3259:     <p class="form-row form-row-wide">
+3260:         <label for="client_type">Тип клиента</label>
+3261:         <select name="client_type" id="client_type">
+3262:             <option value="fiz" <?php selected( $client_type, 'fiz' ); ?>>Физическое лицо</option>
+3263:             <option value="jur" <?php selected( $client_type, 'jur' ); ?>>Юридическое лицо / ИП</option>
+3267:     <div id="jur-fields" style="<?php echo $client_type === 'jur' ? '' : 'display:none;'; ?>">
+3268:         <?php foreach ( $fields as $meta_key => $label ) : 
+3269:             $val = get_user_meta( $user_id, $meta_key, true );
+3271:             <p class="form-row form-row-wide">
+3272:                 <label for="<?php echo $meta_key; ?>"><?php echo esc_html( $label ); ?></label>
+3273:                 <input type="text" name="<?php echo $meta_key; ?>" id="<?php echo $meta_key; ?>" value="<?php echo esc_attr( $val ); ?>"
+3274:                     <?php echo $meta_key === 'billing_inn' ? 'class="inn-lookup"' : ''; ?>>
+3277:         <button type="button" id="inn-lookup-btn">Заполнить по ИНН</button>
+3282:         const select = document.getElementById('client_type');
+3283:         const jurFields = document.getElementById('jur-fields');
+3284:         const innField = document.getElementById('billing_inn');
+3285:         const lookupBtn = document.getElementById('inn-lookup-btn');
+3287:         select.addEventListener('change', function() {
+3288:             if (this.value === 'jur') {
+3289:                 jurFields.style.display = '';
+3291:                 jurFields.style.display = 'none';
+3296:         lookupBtn.addEventListener('click', function() {
+3297:             const inn = innField.value.trim();
+3298:             if (!inn) {
+3299:                 alert('Введите ИНН');
+3303:             lookupBtn.disabled = true;
+3304:             lookupBtn.textContent = 'Загрузка...';
+3306:             fetch('<?php echo admin_url('admin-ajax.php'); ?>', {
+3307:                 method: 'POST',
+3308:                 headers: {
+3309:                     'Content-Type': 'application/x-www-form-urlencoded',
+3311:                 body: 'action=inn_lookup&inn=' + encodeURIComponent(inn)
+3313:             .then(response => response.json())
+3314:             .then(data => {
+3315:                 if (data.success) {
+3316:                     const info = data.data;
+3317:                     if (info.full_name) document.getElementById('billing_full_name').value = info.full_name;
+3318:                     if (info.short_name) document.getElementById('billing_short_name').value = info.short_name;
+3319:                     if (info.legal_address) document.getElementById('billing_legal_address').value = info.legal_address;
+3320:                     if (info.kpp) document.getElementById('billing_kpp').value = info.kpp;
+3321:                     if (info.ogrn) document.getElementById('billing_ogrn').value = info.ogrn;
+3322:                     if (info.director) document.getElementById('billing_director').value = info.director;
+3324:                     alert('Ошибка получения данных: ' + (data.data || 'Неизвестная ошибка'));
+3327:             .catch(error => {
+3328:                 alert('Ошибка запроса: ' + error.message);
+3330:             .finally(() => {
+3331:                 lookupBtn.disabled = false;
+3332:                 lookupBtn.textContent = 'Заполнить по ИНН';
+3341: add_action( 'woocommerce_save_account_details', function( $user_id ) {
+3342:     if ( isset( $_POST['client_type'] ) ) {
+3343:         update_user_meta( $user_id, 'client_type', sanitize_text_field( $_POST['client_type'] ) );
+3345:     $fields = [
+3346:         'billing_full_name', 'billing_short_name', 'billing_legal_address', 'billing_fact_address',
+3347:         'billing_inn', 'billing_kpp', 'billing_ogrn',
+3348:         'billing_director', 'billing_buh', 'billing_dover', 'billing_bank', 'billing_bik',
+3349:         'billing_korr', 'billing_rs'
+3351:     foreach ( $fields as $field ) {
+3352:         if ( isset( $_POST[$field] ) ) {
+3353:             update_user_meta( $user_id, $field, sanitize_text_field( $_POST[$field] ) );
+3359: add_filter( 'woocommerce_account_menu_items', function( $items ) {
+3361:         'dashboard'       => 'Панель управления',
+3362:         'orders'          => 'Заказы',
+3363:         'edit-account'    => 'Мои данные',
+3364:         'edit-address'    => 'Адрес доставки',
+3366: }, 20 );
+3369: add_action( 'woocommerce_account_dashboard', function() {
+3370:     $orders_url = esc_url( wc_get_account_endpoint_url('orders') );
+3371:     $account_url = esc_url( wc_get_account_endpoint_url('edit-account') );
+3372:     $address_url = esc_url( wc_get_account_endpoint_url('edit-address') );
+3375:     <div class="lk-tiles">
+3376:         <a href="<?php echo $orders_url; ?>" class="lk-tile" aria-label="Заказы">
+3377:             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" aria-hidden="true" focusable="false"><path d="M411.883 127.629h-310.08c-18.313 0-33.227 14.921-33.227 33.26v190.095c0 18.332 14.914 33.253 33.227 33.253h310.08c18.32 0 33.24-14.921 33.24-33.253V160.889c-.002-18.34-14.92-33.26-33.24-33.26zM311.34 293.18h-110.67v-27.57h110.67v27.57zm86.11-67.097H115.83v-24.64h281.62v24.64z"/></svg>
+3378:             <br>Заказы
+3380:         <a href="<?php echo $account_url; ?>" class="lk-tile" aria-label="Мои данные">
+3381:             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 12c2.7 0 4.85-2.15 4.85-4.85S14.7 2.3 12 2.3 7.15 4.45 7.15 7.15 9.3 12 12 12zm0 2.7c-3.15 0-9.45 1.6-9.45 4.85v2.15h18.9v-2.15c0-3.25-6.3-4.85-9.45-4.85z"/></svg>
+3382:             <br>Мои данные
+3384:         <a href="<?php echo $address_url; ?>" class="lk-tile" aria-label="Адрес доставки">
+3385:             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 14.5 9 2.5 2.5 0 0 1 12 11.5z"/></svg>
+3386:             <br>Адрес доставки
+3393: add_action( 'woocommerce_account_orders_endpoint', function() {
+3395: }, 5 );
+3398: add_action( 'woocommerce_edit_account_form', function() {
+3400:     $phone = get_user_meta( $user_id, 'billing_phone', true );
+3404:         const lastNameField = document.querySelector('p.woocommerce-form-row.form-row-last');
+3405:         if (lastNameField) {
+3406:             const phoneField = document.createElement('p');
+3407:             phoneField.className = 'woocommerce-form-row woocommerce-form-row--wide form-row form-row-wide';
+3408:             phoneField.innerHTML = `
+3409:                 <label for="account_billing_phone"><?php echo esc_js( __( 'Телефон', 'woocommerce' ) ); ?></label>
+3410:                 <input type="text" class="woocommerce-Input woocommerce-Input--text input-text" name="account_billing_phone" id="account_billing_phone" value="<?php echo esc_js( $phone ); ?>" />
+3412:             lastNameField.after(phoneField);
+3420: add_action( 'woocommerce_save_account_details_errors', function( $args, $user ) {
+3421:     if ( isset( $_POST['account_billing_phone'] ) ) {
+3422:         $phone = trim( $_POST['account_billing_phone'] );
+3423:         if ( $phone === '' ) {
+3424:             $args->add( 'error', __( 'Пожалуйста, укажите телефон.', 'woocommerce' ) );
+3425:         } elseif ( ! preg_match( '/^[\d\+\-\(\) ]+$/', $phone ) ) {
+3426:             $args->add( 'error', __( 'Телефон должен содержать только цифры, +, -, пробелы и скобки.', 'woocommerce' ) );
+3429: }, 10, 2 );
+3432: add_action( 'woocommerce_save_account_details', function( $user_id ) {
+3433:     if ( isset( $_POST['account_billing_phone'] ) ) {
+3434:         update_user_meta( $user_id, 'billing_phone', sanitize_text_field( $_POST['account_billing_phone'] ) );
+3443: add_action( 'woocommerce_register_form_start', function() {
+3445:     <p class="form-row form-row-wide">
+3446:         <label for="reg_client_type">Тип клиента <span class="required">*</span></label>
+3447:         <select name="client_type" id="reg_client_type" required>
+3448:             <option value="">Выберите тип клиента</option>
+3449:             <option value="fiz">Физическое лицо</option>
+3450:             <option value="jur">Юридическое лицо / ИП</option>
+3454:     <div id="reg-jur-fields" style="display:none;">
+3455:         <p class="form-row form-row-wide">
+3456:             <label for="reg_billing_inn">ИНН <span class="required">*</span></label>
+3457:             <input type="text" class="input-text" name="billing_inn" id="reg_billing_inn" />
+3459:         <p class="form-row form-row-wide">
+3460:             <button type="button" id="reg-inn-lookup-btn">Заполнить по ИНН</button>
+3462:         <p class="form-row form-row-wide">
+3463:             <label for="reg_billing_full_name">Полное наименование</label>
+3464:             <input type="text" class="input-text" name="billing_full_name" id="reg_billing_full_name" />
+3466:         <p class="form-row form-row-wide">
+3467:             <label for="reg_billing_short_name">Краткое наименование</label>
+3468:             <input type="text" class="input-text" name="billing_short_name" id="reg_billing_short_name" />
+3470:         <p class="form-row form-row-wide">
+3471:             <label for="reg_billing_legal_address">Юридический адрес</label>
+3472:             <input type="text" class="input-text" name="billing_legal_address" id="reg_billing_legal_address" />
+3474:         <p class="form-row form-row-wide">
+3475:             <label for="reg_billing_kpp">КПП</label>
+3476:             <input type="text" class="input-text" name="billing_kpp" id="reg_billing_kpp" />
+3478:         <p class="form-row form-row-wide">
+3479:             <label for="reg_billing_ogrn">ОГРН / ОГРНИП</label>
+3480:             <input type="text" class="input-text" name="billing_ogrn" id="reg_billing_ogrn" />
+3482:         <p class="form-row form-row-wide">
+3483:             <label for="reg_billing_director">Должность и ФИО руководителя</label>
+3484:             <input type="text" class="input-text" name="billing_director" id="reg_billing_director" />
+3491: add_action( 'woocommerce_register_form_end', function() {
+3495:         const regSelect = document.getElementById('reg_client_type');
+3496:         const regJurFields = document.getElementById('reg-jur-fields');
+3497:         const regInnField = document.getElementById('reg_billing_inn');
+3498:         const regLookupBtn = document.getElementById('reg-inn-lookup-btn');
+3500:         if (!regSelect) return;
+3502:         regSelect.addEventListener('change', function() {
+3503:             if (this.value === 'jur') {
+3504:                 regJurFields.style.display = 'block';
+3506:                 regJurFields.style.display = 'none';
+3510:         if (regLookupBtn) {
+3511:             regLookupBtn.addEventListener('click', function() {
+3512:                 const inn = regInnField.value.trim();
+3513:                 if (!inn) {
+3514:                     alert('Введите ИНН');
+3518:                 regLookupBtn.disabled = true;
+3519:                 regLookupBtn.textContent = 'Загрузка...';
+3521:                 fetch('<?php echo admin_url('admin-ajax.php'); ?>', {
+3522:                     method: 'POST',
+3523:                     headers: {
+3524:                         'Content-Type': 'application/x-www-form-urlencoded',
+3526:                     body: 'action=inn_lookup&inn=' + encodeURIComponent(inn)
+3528:                 .then(response => response.json())
+3529:                 .then(data => {
+3530:                     if (data.success && data.data) {
+3531:                         const info = data.data;
+3532:                         const fullNameField = document.getElementById('reg_billing_full_name');
+3533:                         const shortNameField = document.getElementById('reg_billing_short_name');
+3534:                         const legalAddressField = document.getElementById('reg_billing_legal_address');
+3535:                         const kppField = document.getElementById('reg_billing_kpp');
+3536:                         const ogrnField = document.getElementById('reg_billing_ogrn');
+3537:                         const directorField = document.getElementById('reg_billing_director');
+3539:                         if (info.full_name && fullNameField) fullNameField.value = info.full_name;
+3540:                         if (info.short_name && shortNameField) shortNameField.value = info.short_name;
+3541:                         if (info.legal_address && legalAddressField) legalAddressField.value = info.legal_address;
+3542:                         if (info.kpp && kppField) kppField.value = info.kpp;
+3543:                         if (info.ogrn && ogrnField) ogrnField.value = info.ogrn;
+3544:                         if (info.director && directorField) directorField.value = info.director;
+3546:                         alert('Данные успешно загружены');
+3548:                         alert('Ошибка получения данных: ' + (data.data || 'Неизвестная ошибка'));
+3551:                 .catch(error => {
+3552:                     console.error('Fetch error:', error);
+3553:                     alert('Ошибка запроса: ' + error.message);
+3555:                 .finally(() => {
+3556:                     regLookupBtn.disabled = false;
+3557:                     regLookupBtn.textContent = 'Заполнить по ИНН';
+3567: add_filter( 'woocommerce_registration_errors', function( $errors, $username, $email ) {
+3568:     if ( empty( $_POST['client_type'] ) ) {
+3569:         $errors->add( 'client_type_error', __( 'Пожалуйста, выберите тип клиента.', 'woocommerce' ) );
+3572:     if ( isset( $_POST['client_type'] ) && $_POST['client_type'] === 'jur' ) {
+3573:         if ( empty( $_POST['billing_inn'] ) ) {
+3574:             $errors->add( 'billing_inn_error', __( 'Для юридических лиц обязательно указание ИНН.', 'woocommerce' ) );
+3576:             $inn = sanitize_text_field( $_POST['billing_inn'] );
+3577:             if ( !preg_match('/^\d{10}$|^\d{12}$/', $inn) ) {
+3578:                 $errors->add( 'billing_inn_format_error', __( 'ИНН должен содержать 10 или 12 цифр.', 'woocommerce' ) );
+3584: }, 10, 3 );
+3587: add_action( 'woocommerce_created_customer', function( $customer_id ) {
+3588:     if ( isset( $_POST['client_type'] ) ) {
+3589:         update_user_meta( $customer_id, 'client_type', sanitize_text_field( $_POST['client_type'] ) );
+3592:     $fields = array(
+3593:         'billing_inn', 
+3594:         'billing_full_name', 
+3595:         'billing_short_name', 
+3596:         'billing_legal_address', 
+3597:         'billing_kpp', 
+3598:         'billing_ogrn', 
+3599:         'billing_director'
+3602:     foreach ( $fields as $field ) {
+3603:         if ( isset( $_POST[$field] ) && !empty( $_POST[$field] ) ) {
+3604:             update_user_meta( $customer_id, $field, sanitize_text_field( $_POST[$field] ) );
+3608:     error_log( 'WooCommerce registration: Customer ' . $customer_id . ' created with client_type: ' . ($_POST['client_type'] ?? 'not set') );
+3609: }, 10, 1 );
+3616: add_filter( 'woocommerce_checkout_fields', function( $fields ) {
+3621:     unset( $fields['billing']['billing_country'] );
+3623:     unset( $fields['billing']['billing_company'] );
+3631: add_action( 'woocommerce_after_checkout_billing_form', function( $checkout ) {
+3633:     $client_type = '';
+3635:     if ( $user_id ) {
+3636:         $client_type = get_user_meta( $user_id, 'client_type', true );
+3640:     <div class="checkout-client-type">
+3641:         <h3>Тип плательщика</h3>
+3644:         woocommerce_form_field( 'checkout_client_type', array(
+3645:             'type'          => 'select',
+3646:             'class'         => array('form-row-wide'),
+3647:             'label'         => __('Тип клиента'),
+3648:             'required'      => true,
+3649:             'options'       => array(
+3650:                 ''     => 'Выберите тип клиента',
+3651:                 'fiz'  => 'Физическое лицо',
+3652:                 'jur'  => 'Юридическое лицо / ИП'
+3654:         ), $checkout->get_value( 'checkout_client_type' ) ?: $client_type );
+3657:         <div id="checkout-jur-fields" style="display:none;">
+3659:             $jur_fields = array(
+3660:                 'checkout_billing_inn' => array(
+3661:                     'label' => 'ИНН',
+3662:                     'required' => true,
+3663:                     'class' => array('form-row-wide inn-field')
+3665:                 'checkout_billing_full_name' => array(
+3666:                     'label' => 'Полное наименование',
+3667:                     'class' => array('form-row-wide')
+3669:                 'checkout_billing_short_name' => array(
+3670:                     'label' => 'Краткое наименование',
+3671:                     'class' => array('form-row-wide')
+3673:                 'checkout_billing_legal_address' => array(
+3674:                     'label' => 'Юридический адрес',
+3675:                     'class' => array('form-row-wide')
+3677:                 'checkout_billing_kpp' => array(
+3678:                     'label' => 'КПП',
+3679:                     'class' => array('form-row-first')
+3681:                 'checkout_billing_ogrn' => array(
+3682:                     'label' => 'ОГРН / ОГРНИП',
+3683:                     'class' => array('form-row-last')
+3685:                 'checkout_billing_director' => array(
+3686:                     'label' => 'Должность и ФИО руководителя',
+3687:                     'class' => array('form-row-wide')
+3691:             foreach ( $jur_fields as $key => $args ) {
+3692:                 $value = '';
+3693:                 if ( $user_id ) {
+3694:                     $meta_key = str_replace('checkout_', '', $key);
+3695:                     $value = get_user_meta( $user_id, $meta_key, true );
+3697:                 woocommerce_form_field( $key, $args, $checkout->get_value( $key ) ?: $value );
+3700:             <button type="button" id="checkout-inn-lookup-btn">Заполнить по ИНН</button>
+3706:         const select = document.getElementById('checkout_client_type');
+3707:         const jurFields = document.getElementById('checkout-jur-fields');
+3708:         const innField = document.getElementById('checkout_billing_inn');
+3709:         const lookupBtn = document.getElementById('checkout-inn-lookup-btn');
+3711:         function toggleFields() {
+3712:             if (select && select.value === 'jur') {
+3713:                 jurFields.style.display = 'block';
+3715:                 jurFields.style.display = 'none';
+3719:         toggleFields();
+3721:         if (select) {
+3722:             select.addEventListener('change', toggleFields);
+3725:         if (lookupBtn && innField) {
+3726:             lookupBtn.addEventListener('click', function() {
+3727:                 const inn = innField.value.trim();
+3728:                 if (!inn) {
+3729:                     alert('Введите ИНН');
+3733:                 lookupBtn.disabled = true;
+3734:                 lookupBtn.textContent = 'Загрузка...';
+3736:                 fetch('<?php echo admin_url('admin-ajax.php'); ?>', {
+3737:                     method: 'POST',
+3738:                     headers: {
+3739:                         'Content-Type': 'application/x-www-form-urlencoded',
+3741:                     body: 'action=inn_lookup&inn=' + encodeURIComponent(inn)
+3743:                 .then(response => response.json())
+3744:                 .then(data => {
+3745:                     if (data.success) {
+3746:                         const info = data.data;
+3747:                         if (info.full_name) document.getElementById('checkout_billing_full_name').value = info.full_name;
+3748:                         if (info.short_name) document.getElementById('checkout_billing_short_name').value = info.short_name;
+3749:                         if (info.legal_address) document.getElementById('checkout_billing_legal_address').value = info.legal_address;
+3750:                         if (info.kpp) document.getElementById('checkout_billing_kpp').value = info.kpp;
+3751:                         if (info.ogrn) document.getElementById('checkout_billing_ogrn').value = info.ogrn;
+3752:                         if (info.director) document.getElementById('checkout_billing_director').value = info.director;
+3754:                         alert('Ошибка получения данных: ' + (data.data || 'Неизвестная ошибка'));
+3757:                 .catch(error => {
+3758:                     alert('Ошибка запроса: ' + error.message);
+3760:                 .finally(() => {
+3761:                     lookupBtn.disabled = false;
+3762:                     lookupBtn.textContent = 'Заполнить по ИНН';
+3772: add_action( 'woocommerce_checkout_process', function() {
+3773:     if ( empty( $_POST['checkout_client_type'] ) ) {
+3774:         wc_add_notice( __( 'Пожалуйста, выберите тип клиента.' ), 'error' );
+3777:     if ( isset( $_POST['checkout_client_type'] ) && $_POST['checkout_client_type'] === 'jur' ) {
+3778:         if ( empty( $_POST['checkout_billing_inn'] ) ) {
+3779:             wc_add_notice( __( 'Для юридических лиц обязательно указание ИНН.' ), 'error' );
+3785: add_action( 'woocommerce_checkout_update_order_meta', function( $order_id ) {
+3786:     $checkout_fields = array(
+3787:         'checkout_client_type' => 'client_type',
+3788:         'checkout_billing_inn' => 'billing_inn',
+3789:         'checkout_billing_full_name' => 'billing_full_name',
+3790:         'checkout_billing_short_name' => 'billing_short_name',
+3791:         'checkout_billing_legal_address' => 'billing_legal_address',
+3792:         'checkout_billing_kpp' => 'billing_kpp',
+3793:         'checkout_billing_ogrn' => 'billing_ogrn',
+3794:         'checkout_billing_director' => 'billing_director'
+3799:     foreach ( $checkout_fields as $checkout_field => $meta_key ) {
+3800:         if ( ! empty( $_POST[$checkout_field] ) ) {
+3801:             $value = sanitize_text_field( $_POST[$checkout_field] );
+3804:             update_post_meta( $order_id, '_' . $meta_key, $value );
+3807:             if ( $user_id ) {
+3808:                 update_user_meta( $user_id, $meta_key, $value );
+3815: add_action( 'woocommerce_admin_order_data_after_billing_address', function( $order ) {
+3816:     $client_type = get_post_meta( $order->get_id(), '_client_type', true );
+3818:     if ( $client_type === 'jur' ) {
+3819:         echo '<h3>Реквизиты юридического лица</h3>';
+3821:         $jur_fields = array(
+3822:             '_billing_inn' => 'ИНН',
+3823:             '_billing_full_name' => 'Полное наименование',
+3824:             '_billing_short_name' => 'Краткое наименование',
+3825:             '_billing_legal_address' => 'Юридический адрес',
+3826:             '_billing_kpp' => 'КПП',
+3827:             '_billing_ogrn' => 'ОГРН / ОГРНИП',
+3828:             '_billing_director' => 'Руководитель'
+3831:         foreach ( $jur_fields as $meta_key => $label ) {
+3832:             $value = get_post_meta( $order->get_id(), $meta_key, true );
+3833:             if ( $value ) {
+3834:                 echo '<p><strong>' . esc_html( $label ) . ':</strong> ' . esc_html( $value ) . '</p>';
+3844: add_action( 'wp_ajax_inn_lookup', 'handle_inn_lookup' );
+3845: add_action( 'wp_ajax_nopriv_inn_lookup', 'handle_inn_lookup' );
+3847: function handle_inn_lookup() {
+3848:     $inn = sanitize_text_field( $_POST['inn'] ?? '' );
+3850:     if ( empty( $inn ) ) {
+3851:         wp_send_json_error( 'ИНН не указан' );
+3855:     $api_key = '903f6c9ee3c3fabd7b9ae599e3735b164f9f71d9';
+3856:     $secret_key = 'ea0595f2a66c84887976a56b8e57ec0aa329a9f7';
+3859:     $response = wp_remote_post( 'https://suggestions.dadata.ru/suggestions/api/4_1/rs/findById/party', array(
+3860:         'headers' => array(
+3861:             'Content-Type' => 'application/json',
+3862:             'Accept' => 'application/json',
+3863:             'Authorization' => 'Token ' . $api_key,
+3864:             'X-Secret' => $secret_key
+3866:         'body' => json_encode( array( 'query' => $inn ) ),
+3867:         'timeout' => 30
+3870:     if ( is_wp_error( $response ) ) {
+3871:         wp_send_json_error( 'Ошибка запроса к API: ' . $response->get_error_message() );
+3874:     $body = wp_remote_retrieve_body( $response );
+3875:     $data = json_decode( $body, true );
+3877:     if ( empty( $data['suggestions'] ) ) {
+3878:         wp_send_json_error( 'Данные по указанному ИНН не найдены' );
+3881:     $suggestion = $data['suggestions'][0];
+3882:     $company_data = $suggestion['data'];
+3884: $result = array(
+3885:     'full_name'     => $company_data['name']['full_with_opf'] ?? '',
+3886:     'short_name'    => $company_data['name']['short_with_opf'] ?? '',
+3888:     'legal_address' => $company_data['address']['value'] 
+3889:                        ?? $company_data['address']['unrestricted_value'] 
+3890:                        ?? $suggestion['unrestricted_value'] 
+3891:                        ?? '',
+3892:     'kpp'           => $company_data['kpp'] ?? '',
+3893:     'ogrn'          => $company_data['ogrn'] ?? '',
+3894:     'director'      => ''
+3898:     if ( !empty( $company_data['management'] ) && !empty( $company_data['management']['name'] ) ) {
+3899:         $management = $company_data['management'];
+3900:         $director_name = $management['name'];
+3901:         $director_post = $management['post'] ?? 'Руководитель';
+3902:         $result['director'] = $director_post . ' ' . $director_name;
+3905:     wp_send_json_success( $result );
+3912: add_action( 'admin_menu', function() {
+3913:     add_options_page(
+3914:         'Настройки ИНН API',
+3915:         'ИНН API',
+3916:         'manage_options',
+3917:         'inn-api-settings',
+3918:         'inn_api_settings_page'
+3922: function inn_api_settings_page() {
+3923:     if ( isset( $_POST['submit'] ) ) {
+3924:         update_option( 'dadata_api_key', sanitize_text_field( $_POST['dadata_api_key'] ) );
+3925:         update_option( 'dadata_secret_key', sanitize_text_field( $_POST['dadata_secret_key'] ) );
+3926:         echo '<div class="notice notice-success"><p>Настройки сохранены!</p></div>';
+3929:     $api_key = get_option( 'dadata_api_key', '903f6c9ee3c3fabd7b9ae599e3735b164f9f71d9' );
+3930:     $secret_key = get_option( 'dadata_secret_key', 'ea0595f2a66c84887976a56b8e57ec0aa329a9f7' );
+3932:     <div class="wrap">
+3933:         <h1>Настройки ИНН API</h1>
+3934:         <form method="post">
+3935:             <table class="form-table">
+3937:                     <th scope="row">API ключ DaData</th>
+3938:                     <td><input type="text" name="dadata_api_key" value="<?php echo esc_attr( $api_key ); ?>" class="regular-text" /></td>
+3941:                     <th scope="row">Secret ключ DaData</th>
+3942:                     <td><input type="text" name="dadata_secret_key" value="<?php echo esc_attr( $secret_key ); ?>" class="regular-text" /></td>
+3945:             <?php submit_button(); ?>
+3946:         </form>
+3947:         <p><strong>Примечание:</strong> Для работы автозаполнения по ИНН нужно получить API ключи на сайте <a href="https://dadata.ru/" target="_blank">DaData.ru</a></p>
+3956: add_action( 'wp_head', function() {
+3959:     .checkout-client-type {
+3963:         border-radius: 5px;
+3967:     .checkout-client-type h3 {
+3972:     #checkout-inn-lookup-btn,
+3973:     #inn-lookup-btn,
+3974:     #reg-inn-lookup-btn {
+3976:         padding: 8px 15px;
+3978:         color: white;
+3979:         border: none;
+3980:         border-radius: 3px;
+3981:         cursor: pointer;
+3984:     #checkout-inn-lookup-btn:hover,
+3985:     #inn-lookup-btn:hover,
+3986:     #reg-inn-lookup-btn:hover {
+3987:         background: #005177;
+3990:     #checkout-inn-lookup-btn:disabled,
+3991:     #inn-lookup-btn:disabled,
+3992:     #reg-inn-lookup-btn:disabled {
+3993:         background: #ccc;
+3994:         cursor: not-allowed;
+3997:     .lk-tiles {
+3999:         grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+4000:         gap: 20px;
+4004:     .lk-tile {
+4006:         flex-direction: column;
+4008:         padding: 30px 20px;
+4011:         background: #f8f8f8;
+4013:         transition: all 0.3s ease;
+4017:     .lk-tile:hover {
+4018:         background: #e8e8e8;
+4019:         transform: translateY(-2px);
+4021:         color: #000;
+4024:     .lk-tile svg {
+4025:         width: 48px;
+4026:         height: 48px;
+4027:         fill: currentColor;
+4045: function is_in_liter_categories($product_id) {
+4052:     $target_categories = range(81, 86);
+4062:             if (cat_is_ancestor_of($target_cat_id, $cat_id)) {
+4072: add_filter('woocommerce_get_price_html', function($price, $product) {
+4076:     if (!is_in_liter_categories($product_id)) {
+4081:     if (strpos($price, 'за литр') === false) {
+4083:         if (preg_match('/(.*)<\/span>(.*)$/i', $price, $matches)) {
+4084:             $price = $matches[1] . '/литр</span>' . $matches[2];
+4087:             $price .= ' за литр';
+4099: add_action('wp_footer', function() {
+4103:         function addFacetTitles() {
+4104:             const facetMap = {
+4105:                 'poroda': 'Порода',
+4106:                 'sort_': 'Сорт',
+4107:                 'profil': 'Профиль', 
+4108:                 'dlina': 'Длина',
+4109:                 'shirina': 'Ширина',
+4110:                 'tolshina': 'Толщина',
+4111:                 'proizvoditel': 'Производитель',
+4112:                 'krepej': 'Крепёж',
+4113:                 'tip': 'Тип',
+4114:                 'brend': 'Бренд'
+4118:             const facets = document.querySelectorAll('.facetwp-facet');
+4120:             facets.forEach(facet => {
+4121:                 const facetName = facet.getAttribute('data-name');
+4122:                 const titleText = facetMap[facetName];
+4124:                 if (titleText) {
+4126:                     const prevElement = facet.previousElementSibling;
+4127:                     const hasTitle = prevElement && 
+4128:                                    prevElement.classList.contains('facet-title-added');
+4131:                     const hasContent = facet.querySelector('.facetwp-checkbox') || 
+4132:                                      facet.querySelector('.facetwp-search') ||
+4133:                                      facet.querySelector('.facetwp-slider') ||
+4134:                                      facet.innerHTML.trim() !== '';
+4136:                     if (!hasTitle && hasContent) {
+4138:                         const title = document.createElement('div');
+4139:                         title.className = 'facet-title-added';
+4140:                         title.innerHTML = `<h4 style="margin: 20px 0 10px 0; padding: 8px 0 5px 0; font-size: 16px; font-weight: 600; color: #333; border-bottom: 2px solid #8bc34a; text-transform: uppercase; letter-spacing: 0.5px;">${titleText}</h4>`;
+4143:                         facet.parentNode.insertBefore(title, facet);
+4147:                     if (hasTitle && !hasContent) {
+4148:                         const titleElement = facet.previousElementSibling;
+4149:                         if (titleElement && titleElement.classList.contains('facet-title-added')) {
+4150:                             titleElement.remove();
+4158:         addFacetTitles();
+4161:         const interval = setInterval(addFacetTitles, 300);
+4164:         setTimeout(() => clearInterval(interval), 10000);
+4167:         if (typeof FWP !== 'undefined') {
+4168:             document.addEventListener('facetwp-loaded', addFacetTitles);
+4169:             document.addEventListener('facetwp-refresh', addFacetTitles);
+4173:         const observer = new MutationObserver(addFacetTitles);
+4174:         observer.observe(document.body, {
+4175:             childList: true,
+4176:             subtree: true
+4200: function tara_by_brand() {
+4202:         'reiner'    => [1, 3, 5, 25],
+4203:         'renowood'  => [1, 3, 5, 9],
+4204:         'talatu'    => [1, 3, 5, 18],
+4205:         'tikkurila' => [1, 3, 5, 9, 18],
+4206:         'woodsol'   => [1, 3, 5, 18]
+4211: function get_product_brand_for_tara($product_id) {
+4213:     $brand_taxonomies = [
+4214:         'product_brand',        // Официальный плагин WooCommerce Brands
+4215:         'yith_product_brand',   // YITH WooCommerce Brands
+4216:         'pa_brand',            // Атрибут товара "Бренд"
+4217:         'pa_brend',            // Атрибут товара "Бренд" (с опечаткой)
+4218:         'pwb-brand',           // Perfect WooCommerce Brands
+4219:         'brand'                // Другие плагины
+4222:     foreach ($brand_taxonomies as $taxonomy) {
+4223:         if (taxonomy_exists($taxonomy)) {
+4224:             $terms = wp_get_post_terms($product_id, $taxonomy);
+4225:             if (!empty($terms) && !is_wp_error($terms)) {
+4226:                 return strtolower($terms[0]->slug); // Возвращаем slug в нижнем регистре
+4232:     $meta_keys = ['_brand', 'brand', '_product_brand'];
+4233:     foreach ($meta_keys as $key) {
+4234:         $brand = get_post_meta($product_id, $key, true);
+4235:         if (!empty($brand)) {
+4236:             return strtolower(sanitize_title($brand));
+4244: function debug_brand_taxonomy($product_id) {
+4245:     echo "<!-- Диагностика брендов для товара #$product_id -->\n";
+4247:     $brand_taxonomies = [
+4248:         'product_brand',
+4249:         'yith_product_brand', 
+4250:         'pa_brand',
+4251:         'pa_brend',
+4252:         'pwb-brand',
+4253:         'brand'
+4256:     foreach ($brand_taxonomies as $taxonomy) {
+4257:         if (taxonomy_exists($taxonomy)) {
+4258:             $terms = wp_get_post_terms($product_id, $taxonomy);
+4259:             if (!empty($terms) && !is_wp_error($terms)) {
+4260:                 echo "<!-- Найден бренд в '$taxonomy': {$terms[0]->name} (slug: {$terms[0]->slug}) -->\n";
+4262:                 echo "<!-- Таксономия '$taxonomy' существует, но брендов нет -->\n";
+4265:             echo "<!-- Таксономия '$taxonomy' не существует -->\n";
+4271: add_action('woocommerce_before_add_to_cart_button', function() {
+4273:     if (!$product->is_type('simple')) return;
+4278:     if (current_user_can('manage_options')) {
+4279:         debug_brand_taxonomy($product_id);
+4283:     $brand_slug = get_product_brand_for_tara($product_id);
+4285:     if (!$brand_slug) {
+4286:         echo "<!-- Бренд не найден для товара #$product_id -->\n";
+4290:     echo "<!-- Найден бренд: $brand_slug -->\n";
+4292:     $map = tara_by_brand();
+4295:     if (!empty($map[$brand_slug])) {
+4296:         $base_price = wc_get_price_to_display($product);
+4299:             #brxe-gkyfue .cart {
+4300:                 align-items: flex-end;
+4302:             .tara-select {
+4305:             .tara-select label {
+4308:                 font-weight: bold;
+4309:                 white-space: nowrap;
+4312:         <div class="tara-select">
+4313:             <label for="tara">Объем (л): </label>
+4314:             <div class="tinv-wraper" style="padding:2.5px; width:80px; display:inline-block;">
+4315:                 <select id="tara" name="tara" data-base-price="<?php echo esc_attr($base_price); ?>">
+4316:                     <?php foreach ($map[$brand_slug] as $volume): ?>
+4317:                         <option value="<?php echo esc_attr($volume); ?>"><?php echo esc_html($volume); ?> л</option>
+4324:         echo "<!-- Бренд '$brand_slug' не найден в списке доступных объёмов -->\n";
+4325:         echo "<!-- Доступные бренды: " . implode(', ', array_keys($map)) . " -->\n";
+4330: add_filter('woocommerce_add_cart_item_data', function($cart_item_data, $product_id, $variation_id) {
+4331:     if (isset($_POST['tara'])) {
+4332:         $cart_item_data['tara'] = (float) $_POST['tara'];
+4338: add_filter('woocommerce_get_item_data', function($item_data, $cart_item) {
+4339:     if (!empty($cart_item['tara'])) {
+4340:         $item_data[] = [
+4341:             'name'  => 'Объем',
+4342:             'value' => $cart_item['tara'] . ' л',
+4349: add_action('woocommerce_before_calculate_totals', function($cart) {
+4350:     if (is_admin() && !defined('DOING_AJAX')) return;
+4352:     foreach ($cart->get_cart() as $cart_item) {
+4353:         if (!empty($cart_item['tara'])) {
+4354:             $price_per_liter = (float) $cart_item['data']->get_price();
+4355:             $final_price = $price_per_liter * $cart_item['tara'];
+4356:             if ($cart_item['tara'] >= 9) {
+4357:                 $final_price *= 0.9; // скидка 10%
+4359:             $cart_item['data']->set_price($final_price);
+4365: add_action('wp_footer', function() {
+4366:     if ( ! is_product() ) return;
+4370:         let select = document.getElementById('tara');
+4373:         let priceEl = document.querySelector('.woocommerce-Price-amount');
+4374:         let basePrice = parseFloat(select.dataset.basePrice);
+4376:         function updatePrice() {
+4377:             let multiplier = parseFloat(select.value) || 1;
+4378:             let newPrice = basePrice * multiplier;
+4379:             if (multiplier >= 9) {
+4380:                 newPrice *= 0.9; // скидка 10%
+4382:             if (priceEl) {
+4383:                 priceEl.innerHTML = newPrice.toFixed(2).replace('.', ',') + ' ₽';
+4387:         select.addEventListener('change', updatePrice);
+4388:         updatePrice();
+4400: function facetwp_custom_text_replacement() {
+4405:         function replaceFacetWPText() {
+4407:             const toggleElements = document.querySelectorAll('.facetwp-toggle');
+4409:             toggleElements.forEach(function(element) {
+4411:                 const regex = /Посмотреть\s+(\d+)\s+Подробнее/g;
+4413:                 if (element.textContent && regex.test(element.textContent)) {
+4414:                     element.textContent = element.textContent.replace(regex, 'Развернуть (еще $1)');
+4419:             const otherElements = document.querySelectorAll('.facetwp-expand, .facetwp-collapse, [class*="facet"] a, [class*="facet"] span');
+4421:             otherElements.forEach(function(element) {
+4422:                 const regex = /Посмотреть\s+(\d+)\s+Подробнее/g;
+4424:                 if (element.textContent && regex.test(element.textContent)) {
+4425:                     element.textContent = element.textContent.replace(regex, 'Раскрыть $1');
+4431:         replaceFacetWPText();
+4434:         document.addEventListener('facetwp-loaded', function() {
+4435:             setTimeout(replaceFacetWPText, 100);
+4439:         const observer = new MutationObserver(function(mutations) {
+4440:             mutations.forEach(function(mutation) {
+4441:                 if (mutation.type === 'childList') {
+4442:                     replaceFacetWPText();
+4448:         const facetContainer = document.querySelector('.facetwp-template');
+4449:         if (facetContainer) {
+4450:             observer.observe(facetContainer, {
+4451:                 childList: true,
+4452:                 subtree: true
+4456: if (document.getElementById('rm_height1')) {
+4457:     document.getElementById('rm_height1').addEventListener('change', updateRunningMeterCalc);
+4459: if (document.getElementById('rm_height2')) {
+4460:     document.getElementById('rm_height2').addEventListener('change', updateRunningMeterCalc);
+4462: if (document.getElementById('rm_height')) {
+4463:     document.getElementById('rm_height').addEventListener('change', updateRunningMeterCalc);
+4468:     if (!e || !e.target) return;
+4469:     if (e.target.id === 'rm_height' || e.target.id === 'rm_height1' || e.target.id === 'rm_height2') {
+4470:         try { console.log('Height changed:', e.target.id, '=', e.target.value); } catch(e) {}
+4471:         if (typeof updateRunningMeterCalc === 'function') updateRunningMeterCalc();
+4479: add_action('wp_footer', 'facetwp_custom_text_replacement');
+4488: /* ===== Mega Menu: атрибуты из JSON с подменой при наведении ===== */
+4490: add_action('wp_footer', function(){ ?>
+4492: jQuery(function($){
+4493:     let cache = null;
+4496:     $.getJSON('<?php echo home_url("/menu_attributes.json"); ?>', function(data){
+4497:         cache = data;
+4500:         $('.widget_layered_nav').each(function(){
+4501:             renderAttributes($(this));
+4506:     $(document).on('mouseenter', '.mega-menu-item-type-taxonomy', function(){
+4507:         let href = $(this).find('a').attr('href');
+4508:         if (!href) return;
+4511:         let parts = href.split('/');
+4512:         let catSlug = parts.filter(Boolean).pop(); 
+4514:         $('.widget_layered_nav').each(function(){
+4515:             renderAttributes($(this), catSlug);
+4519:     function renderAttributes($widget, overrideCat){
+4520:         if (!cache) return;
+4522:         let attr = $widget.data('attribute');
+4523:         let cat = overrideCat || $widget.data('category');
+4525:         if (cat && attr && cache[cat] && cache[cat][attr]) {
+4526:             let $ul = $('<ul class="attribute-list"/>');
+4527:             cache[cat][attr].forEach(function(t){
+4528:                 let base = '<?php echo home_url("/product-category/"); ?>' + cat + '/';
+4529:                 let url = base + '?_' + attr.replace('pa_','') + '=' + t.slug;
+4530:                 $ul.append('<li><a href="'+url+'">'+t.name+' <span class="count">('+t.count+')</span></a></li>');
+4532:             $widget.html($ul);
+4534:             $widget.html('<div class="no-attributes">Нет атрибутов</div>');
+4539: <?php });
+4559: add_action('wp_enqueue_scripts', function() {
+4560:     if (is_checkout() || is_cart()) {
+4561:         $api_key = '81c72bf5-a635-4fb5-8939-e6b31aa52ffe';
+4562:         wp_enqueue_script('yandex-maps', "https://api-maps.yandex.ru/2.1/?apikey={$api_key}&lang=ru_RU", [], null, true);
+4563:         wp_enqueue_script('delivery-calc', get_stylesheet_directory_uri() . '/js/delivery-calc.js', ['jquery','yandex-maps'], '1.3', true);
+4565:         $cart_weight = WC()->cart ? WC()->cart->get_cart_contents_weight() : 0;
+4566:         wp_localize_script('delivery-calc', 'deliveryVars', [
+4568:             'basePoint' => 'г. Санкт-Петербург, Выборгское шоссе 369к6',
+4569:             'rateLight' => 200, // руб/км для легких грузов (до 1500г)
+4570:             'rateHeavy' => 250, // руб/км для тяжелых грузов (свыше 1500г)
+4571:             'minLight' => 6000, // минимальная стоимость для легких грузов
+4572:             'minHeavy' => 7500, // минимальная стоимость для тяжелых грузов
+4573:             'minDistance' => 30, // минимальное расстояние для применения минималки (км)
+4574:             'cartWeight' => $cart_weight,
+4575:             'apiKey' => $api_key
+4581: add_action('wp_ajax_set_delivery_cost', 'set_delivery_cost');
+4582: add_action('wp_ajax_nopriv_set_delivery_cost', 'set_delivery_cost');
+4583: function set_delivery_cost() {
+4584:     if (isset($_POST['cost'])) {
+4585:         $cost = round(floatval($_POST['cost'])); // округляем до целых
+4586:         WC()->session->set('custom_delivery_cost', $cost);
+4589:         if (!empty($_POST['distance'])) {
+4590:             WC()->session->set('delivery_distance', floatval($_POST['distance']));
+4594:         error_log("Установлена стоимость доставки: {$cost} руб.");
+4597:         if (function_exists('wc_clear_notices')) {
+4598:             wc_clear_notices();
+4602:         wp_cache_flush();
+4603:         WC_Cache_Helper::get_transient_version('shipping', true);
+4604:         delete_transient('wc_shipping_method_count');
+4607:         $packages_hash = 'wc_ship_' . md5( 
+4608:             json_encode(WC()->cart->get_cart_for_session()) . 
+4609:             WC()->customer->get_shipping_country() . 
+4610:             WC()->customer->get_shipping_state() . 
+4611:             WC()->customer->get_shipping_postcode() . 
+4612:             WC()->customer->get_shipping_city()
+4614:         wp_cache_delete($packages_hash, 'shipping_zones');
+4617:         if (WC()->cart) {
+4618:             WC()->cart->calculate_shipping();
+4619:             WC()->cart->calculate_totals();
+4623:             'cost'    => $cost,
+4624:             'message' => 'Стоимость доставки обновлена'
+4627:         wp_send_json_error('Не указана стоимость');
+4629:     wp_die();
+4634: add_action('wp_ajax_clear_delivery_cost', 'clear_delivery_cost');
+4635: add_action('wp_ajax_nopriv_clear_delivery_cost', 'clear_delivery_cost');
+4636: function clear_delivery_cost() {
+4637:     WC()->session->__unset('custom_delivery_cost');
+4638:     WC()->session->__unset('delivery_distance');
+4641:     WC_Cache_Helper::get_transient_version('shipping', true);
+4642:     delete_transient('wc_shipping_method_count');
+4644:     if (WC()->cart) {
+4645:         WC()->cart->calculate_shipping();
+4646:         WC()->cart->calculate_totals();
+4649:     wp_send_json_success(['message' => 'Стоимость доставки очищена']);
+4650:     wp_die();
+4654: add_action('woocommerce_shipping_init', 'init_custom_delivery_method');
+4655: function init_custom_delivery_method() {
+4656:     if (!class_exists('WC_Custom_Delivery_Method')) {
+4657:         class WC_Custom_Delivery_Method extends WC_Shipping_Method {
+4658:             public function __construct($instance_id = 0) {
+4659:                 $this->id = 'custom_delivery';
+4660:                 $this->instance_id = absint($instance_id);
+4661:                 $this->method_title = __('Доставка по карте');
+4662:                 $this->method_description = __('Расчет доставки по карте');
+4663:                 $this->supports = array(
+4664:                     'shipping-zones',
+4665:                     'instance-settings',
+4667:                 $this->enabled = 'yes';
+4668:                 $this->title = 'Доставка по карте';
+4669:                 $this->init();
+4672:             public function init() {
+4673:                 $this->init_form_fields();
+4674:                 $this->init_settings();
+4675:                 $this->enabled = $this->get_option('enabled');
+4676:                 $this->title = $this->get_option('title');
+4679:                 add_action('woocommerce_update_options_shipping_' . $this->id, array($this, 'process_admin_options'));
+4682:             public function init_form_fields() {
+4683:                 $this->form_fields = array(
+4684:                     'enabled' => array(
+4685:                         'title' => __('Включить/Отключить'),
+4686:                         'type' => 'checkbox',
+4687:                         'description' => __('Включить этот метод доставки.'),
+4688:                         'default' => 'yes'
+4690:                     'title' => array(
+4691:                         'title' => __('Название'),
+4693:                         'description' => __('Название метода доставки.'),
+4694:                         'default' => __('Доставка по карте'),
+4700:             public function calculate_shipping($package = array()) {
+4701:                 $delivery_cost = WC()->session->get('custom_delivery_cost');
+4703:                 if ($delivery_cost && $delivery_cost > 0) {
+4704:                     $rate = array(
+4705:                         'id' => $this->id . ':' . $this->instance_id,
+4706:                         'label' => $this->title,
+4707:                         'cost' => $delivery_cost,
+4708:                         'calc_tax' => 'per_item'
+4711:                     $this->add_rate($rate);
+4719: add_filter('woocommerce_shipping_methods', 'add_custom_delivery_method');
+4720: function add_custom_delivery_method($methods) {
+4721:     $methods['custom_delivery'] = 'WC_Custom_Delivery_Method';
+4722:     return $methods;
+4726: add_action('woocommerce_checkout_update_order_review', 'force_shipping_update');
+4727: function force_shipping_update($post_data) {
+4728:     if (WC()->session->get('custom_delivery_cost')) {
+4730:         WC_Cache_Helper::get_transient_version('shipping', true);
+4733:         WC()->cart->calculate_shipping();
+4734:         WC()->cart->calculate_totals();
+4739: add_action('woocommerce_before_checkout_billing_form', function() {
+4742:     .woocommerce-delivery-calc {
+4743:         background: #f8f9fa;
+4747:         border: 1px solid #dee2e6;
+4749:     .woocommerce-delivery-calc h3 {
+4750:         margin: 0 0 15px 0;
+4751:         color: #495057;
+4754:     #delivery-map {
+4756:         height: 400px;
+4758:         border: 2px solid #dee2e6;
+4760:         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+4762:     #ymaps-address {
+4764:         padding: 12px;
+4766:         box-sizing: border-box;
+4767:         border: 1px solid #ced4da;
+4771:     #ymaps-address:focus {
+4772:         outline: none;
+4773:         border-color: #0066cc;
+4774:         box-shadow: 0 0 0 2px rgba(0,102,204,0.2);
+4777:     /* Стили для автокомплита */
+4778:     .ymaps-suggest-container {
+4779:         position: absolute;
+4780:         background: white;
+4781:         border: 1px solid #ccc;
+4782:         max-height: 200px;
+4783:         overflow-y: auto;
+4784:         z-index: 1000;
+4786:         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+4788:         margin-top: 1px;
+4791:     .ymaps-suggest-item {
+4793:         cursor: pointer;
+4794:         border-bottom: 1px solid #eee;
+4795:         transition: background-color 0.2s;
+4798:     .ymaps-suggest-item:last-child {
+4799:         border-bottom: none;
+4802:     .ymaps-suggest-item:hover,
+4803:     .ymaps-suggest-item.active {
+4804:         background-color: #f5f5f5;
+4807:     .ymaps-suggest-item.active {
+4808:         background-color: #007bff !important;
+4809:         color: white !important;
+4812:     @media(max-width:768px) {
+4813:         #delivery-map { height: 300px; }
+4814:         .woocommerce-delivery-calc { padding: 15px; margin-bottom: 15px; }
+4816:     #delivery-result {
+4820:     .delivery-instructions {
+4821:         background: #e7f3ff;
+4825:         font-size: 13px;
+4826:         color: #0066cc;
+4830:     <div class="woocommerce-delivery-calc">
+4831:         <h3>📍 Расчет стоимости доставки</h3>
+4832:         <div class="delivery-instructions">
+4833:             💡 <strong>Как рассчитать доставку:</strong><br>
+4834:             1️⃣ Введите адрес в поле ниже и выберите из подсказок<br>
+4835:             2️⃣ Или просто кликните по нужной точке на карте<br>
+4836:             3️⃣ Стоимость рассчитается автоматически
+4839:             <label for="ymaps-address"><strong>🏠 Адрес доставки:</strong>
+4840:                 <input type="text" id="ymaps-address" placeholder="Введите адрес доставки (например: Невский проспект, 1)">
+4843:         <div id="delivery-map"></div>
+4844:         <div id="delivery-result"></div>
+4850: add_action('woocommerce_checkout_update_order_meta', 'save_delivery_info_to_order');
+4851: function save_delivery_info_to_order($order_id) {
+4852:     $delivery_cost = WC()->session->get('custom_delivery_cost');
+4853:     $delivery_distance = WC()->session->get('delivery_distance');
+4855:     if ($delivery_cost) {
+4856:         update_post_meta($order_id, '_delivery_cost', $delivery_cost);
+4858:     if ($delivery_distance) {
+4859:         update_post_meta($order_id, '_delivery_distance', $delivery_distance);
+4863:     WC()->session->__unset('custom_delivery_cost');
+4864:     WC()->session->__unset('delivery_distance');
+4868: add_action('woocommerce_admin_order_data_after_shipping_address', 'display_delivery_info_in_admin');
+4869: function display_delivery_info_in_admin($order) {
+4870:     $delivery_cost = get_post_meta($order->get_id(), '_delivery_cost', true);
+4871:     $delivery_distance = get_post_meta($order->get_id(), '_delivery_distance', true);
+4873:     if ($delivery_cost || $delivery_distance) {
+4874:         echo '<h3>Информация о доставке</h3>';
+4875:         if ($delivery_distance) {
+4876:             echo '<p><strong>Расстояние:</strong> ' . number_format($delivery_distance, 1) . ' км</p>';
+4878:         if ($delivery_cost) {
+4879:             echo '<p><strong>Стоимость доставки:</strong> ' . number_format($delivery_cost, 0) . ' ₽</p>';
+4885: add_filter('woocommerce_checkout_show_ship_to_different_address', '__return_true');
+4887: add_filter('woocommerce_ship_to_different_address_checked', '__return_true');
+4890: add_filter('woocommerce_billing_fields', 'remove_billing_required_fields');
+4891: function remove_billing_required_fields($fields) {
+4892:     foreach($fields as $key => &$field) {
+4893:         if ($key !== 'billing_email') {
+4894:             $field['required'] = false;
+4901: add_action('wp_footer', function() {
+4902:     if (!is_checkout()) return;
+4906:         console.log('=== ИНИЦИАЛИЗАЦИЯ WooCommerce ИНТЕГРАЦИИ ===');
+4909:         window.updateWooCommerceAddress = function(address) {
+4910:             console.log('updateWooCommerceAddress вызвана с адресом:', address);
+4913:             setTimeout(function() {
+4915:                 var $shippingAddress1 = $('input[name="shipping_address_1"]');
+4916:                 var $shippingAddress2 = $('input[name="shipping_address_2"]');
+4917:                 var $shippingCity = $('input[name="shipping_city"]');
+4920:                 var $billingAddress1 = $('input[name="billing_address_1"]');
+4921:                 var $billingAddress2 = $('input[name="billing_address_2"]');  
+4922:                 var $billingCity = $('input[name="billing_city"]');
+4924:                 console.log('Найдено полей shipping_address_1:', $shippingAddress1.length);
+4925:                 console.log('Найдено полей billing_address_1:', $billingAddress1.length);
+4928:                 var parsedAddress = parseAddressForWooCommerce(address);
+4931:                 if ($shippingAddress1.length) {
+4932:                     $shippingAddress1.val(parsedAddress.address1);
+4933:                     $shippingAddress1.trigger('input').trigger('change').trigger('blur');
+4934:                     console.log('✓ shipping_address_1 обновлен:', parsedAddress.address1);
+4937:                 if ($shippingAddress2.length && parsedAddress.address2) {
+4938:                     $shippingAddress2.val(parsedAddress.address2);
+4939:                     $shippingAddress2.trigger('input').trigger('change').trigger('blur');
+4940:                     console.log('✓ shipping_address_2 обновлен:', parsedAddress.address2);
+4943:                 if ($shippingCity.length && parsedAddress.city) {
+4944:                     $shippingCity.val(parsedAddress.city);
+4945:                     $shippingCity.trigger('input').trigger('change').trigger('blur');
+4946:                     console.log('✓ shipping_city обновлен:', parsedAddress.city);
+4950:                 if ($billingAddress1.length) {
+4951:                     $billingAddress1.val(parsedAddress.address1);
+4952:                     $billingAddress1.trigger('input').trigger('change').trigger('blur');
+4953:                     console.log('✓ billing_address_1 обновлен:', parsedAddress.address1);
+4956:                 if ($billingAddress2.length && parsedAddress.address2) {
+4957:                     $billingAddress2.val(parsedAddress.address2);
+4958:                     $billingAddress2.trigger('input').trigger('change').trigger('blur');
+4959:                     console.log('✓ billing_address_2 обновлен:', parsedAddress.address2);
+4962:                 if ($billingCity.length && parsedAddress.city) {
+4963:                     $billingCity.val(parsedAddress.city);
+4964:                     $billingCity.trigger('input').trigger('change').trigger('blur');
+4965:                     console.log('✓ billing_city обновлен:', parsedAddress.city);
+4969:                 setTimeout(function() {
+4970:                     $('body').trigger('update_checkout');
+4971:                     console.log('🔄 Checkout обновлен после заполнения адреса');
+4974:             }, 100);
+4978:         function parseAddressForWooCommerce(fullAddress) {
+4979:             var city = '';
+4980:             var address1 = fullAddress;
+4981:             var address2 = '';
+4984:             var cityPatterns = [
+4985:                 /^([^,]+(?:область|край|республика|округ))[,\s]+(.+)/i,
+4986:                 /^(г\.\s*[^,]+)[,\s]+(.+)/i,
+4987:                 /^([^,]+(?:город|посёлок|село|деревня))[,\s]+(.+)/i,
+4988:                 /^(Москва|Санкт-Петербург|СПб|Московская область|Ленинградская область)[,\s]+(.+)/i
+4991:             for (var i = 0; i < cityPatterns.length; i++) {
+4992:                 var match = fullAddress.match(cityPatterns[i]);
+4993:                 if (match) {
+4994:                     city = match[1].trim();
+4995:                     address1 = match[2].trim();
+5001:             var apartmentPatterns = [
+5002:                 /^(.+),\s*(кв\.?\s*\d+|квартира\s*\d+|оф\.?\s*\d+|офис\s*\d+)$/i,
+5003:                 /^(.+),\s*(\d+[А-Я]?)$/i
+5006:             for (var j = 0; j < apartmentPatterns.length; j++) {
+5007:                 var match2 = address1.match(apartmentPatterns[j]);
+5008:                 if (match2) {
+5009:                     address1 = match2[1].trim();
+5010:                     address2 = match2[2].trim();
+5015:             console.log('Парсинг адреса:', {
+5016:                 original: fullAddress,
+5017:                 city: city,
+5018:                 address1: address1,
+5019:                 address2: address2
+5022:             return {
+5023:                 city: city,
+5024:                 address1: address1,
+5025:                 address2: address2
+5030:         function ensureShippingFieldsVisible() {
+5031:             $('.woocommerce-shipping-fields, .shipping_address').show();
+5032:             $('[name^="shipping_"]').closest('.form-row').show();
+5033:             $('#ship-to-different-address-checkbox').prop('checked', true);
+5034:             console.log('✓ Поля доставки принудительно показаны');
+5038:         ensureShippingFieldsVisible();
+5039:         setTimeout(ensureShippingFieldsVisible, 500);
+5040:         setTimeout(ensureShippingFieldsVisible, 1000);
+5043:         $(document).on('updated_checkout', function() {
+5044:             console.log('=== CHECKOUT ОБНОВЛЕН ===');
+5047:             ensureShippingFieldsVisible();
+5050:             var deliveryMethods = $('#shipping_method li label, .woocommerce-shipping-methods li label');
+5051:             console.log('Найдено методов доставки:', deliveryMethods.length);
+5053:             deliveryMethods.each(function(index) {
+5054:                 console.log('Метод доставки ' + (index + 1) + ':', $(this).text().trim());
+5058:             var customDeliveryRadio = $('input[value*="custom_delivery"]');
+5059:             if (customDeliveryRadio.length && !$('input[name="shipping_method[0]"]:checked').length) {
+5060:                 customDeliveryRadio.prop('checked', true).trigger('change');
+5061:                 console.log('✓ Автоматически выбран метод доставки по карте');
+5066:         $(document).on('change input blur', 'input[name^="shipping_"], input[name^="billing_"]', function() {
+5067:             var fieldName = $(this).attr('name');
+5068:             var fieldValue = $(this).val();
+5069:             console.log('Поле изменено:', fieldName, '=', fieldValue);
+5078: add_filter('woocommerce_checkout_show_ship_to_different_address', '__return_false');
+5079: add_filter('woocommerce_cart_needs_shipping_address', '__return_false');
+5082: add_filter('woocommerce_form_field', function($field, $key, $args, $value) {
+5083:     if (strpos($field, '(необязательно)') !== false) {
+5084:         $field = str_replace('(необязательно)', '', $field);
+5086:     return $field;
+5087: }, 10, 4);
+5110: add_action('woocommerce_product_options_general_product_data', 'add_falsebalk_shapes_fields');
+5111: function add_falsebalk_shapes_fields() {
+5115:     if (!has_term(266, 'product_cat', $post->ID)) {
+5119:     echo '<div class="options_group falsebalk_shapes_group">';
+5120:     echo '<h3 style="padding-left: 12px; color: #3aa655; border-bottom: 2px solid #3aa655; padding-bottom: 10px; margin-bottom: 15px;">⚙️ Настройки размеров фальшбалок</h3>';
+5128:     $shapes = [
+5129:         'g' => ['label' => 'Г-образная', 'icon' => '⌐'],
+5130:         'p' => ['label' => 'П-образная', 'icon' => '⊓'],
+5131:         'o' => ['label' => 'О-образная', 'icon' => '▢']
+5134:     foreach ($shapes as $shape_key => $shape_info) {
+5135:         $shape_label = $shape_info['label'];
+5136:         $shape_icon = $shape_info['icon'];
+5138:         echo '<div style="padding: 15px; margin: 12px; border: 2px solid #e0e0e0; border-radius: 8px; background: #f9f9f9;">';
+5139:         echo '<h4 style="margin-top: 0; color: #333; font-size: 15px;">' . $shape_icon . ' ' . $shape_label . '</h4>';
+5141:         $current_data = isset($shapes_data[$shape_key]) ? $shapes_data[$shape_key] : [];
+5144:         $enabled = isset($current_data['enabled']) ? $current_data['enabled'] : false;
+5147:             'id' => '_shape_' . $shape_key . '_enabled',
+5148:             'label' => 'Активировать эту форму',
+5149:             'description' => 'Отметьте, чтобы форма отображалась в калькуляторе',
+5150:             'value' => $enabled ? 'yes' : 'no',
+5153:         echo '<div class="shape-params-' . $shape_key . '" style="' . (!$enabled ? 'opacity: 0.5; pointer-events: none;' : '') . '">';
+5156:         echo '<div style="background: #fff; padding: 12px; margin: 10px 0; border-radius: 5px; border-left: 3px solid #2196F3;">';
+5157:         echo '<h5 style="margin: 0 0 10px 0; color: #555;">Ширина (мм)</h5>';
+5158:         echo '<div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">';
+5161:             'id' => '_shape_' . $shape_key . '_width_min',
+5162:             'label' => 'Минимум',
+5164:             'custom_attributes' => ['step' => '1', 'min' => '1'],
+5165:             'value' => isset($current_data['width_min']) ? $current_data['width_min'] : '',
+5166:             'placeholder' => '100',
+5170:             'id' => '_shape_' . $shape_key . '_width_max',
+5171:             'label' => 'Максимум',
+5173:             'custom_attributes' => ['step' => '1', 'min' => '1'],
+5174:             'value' => isset($current_data['width_max']) ? $current_data['width_max'] : '',
+5175:             'placeholder' => '300',
+5179:             'id' => '_shape_' . $shape_key . '_width_step',
+5180:             'label' => 'Шаг',
+5182:             'custom_attributes' => ['step' => '1', 'min' => '1'],
+5183:             'value' => isset($current_data['width_step']) ? $current_data['width_step'] : '50',
+5184:             'placeholder' => '50',
+5187:         echo '</div></div>';
+5192:             echo '<div style="background: #fff; padding: 12px; margin: 10px 0; border-radius: 5px; border-left: 3px solid #4CAF50;">';
+5193:             echo '<h5 style="margin: 0 0 10px 0; color: #555;">Высота 1 (мм) - левая сторона</h5>';
+5194:             echo '<div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">';
+5197:                 'id' => '_shape_' . $shape_key . '_height1_min',
+5198:                 'label' => 'Минимум',
+5200:                 'custom_attributes' => ['step' => '1', 'min' => '1'],
+5201:                 'value' => isset($current_data['height1_min']) ? $current_data['height1_min'] : '',
+5202:                 'placeholder' => '100',
+5206:                 'id' => '_shape_' . $shape_key . '_height1_max',
+5207:                 'label' => 'Максимум',
+5209:                 'custom_attributes' => ['step' => '1', 'min' => '1'],
+5210:                 'value' => isset($current_data['height1_max']) ? $current_data['height1_max'] : '',
+5211:                 'placeholder' => '300',
+5215:                 'id' => '_shape_' . $shape_key . '_height1_step',
+5216:                 'label' => 'Шаг',
+5218:                 'custom_attributes' => ['step' => '1', 'min' => '1'],
+5219:                 'value' => isset($current_data['height1_step']) ? $current_data['height1_step'] : '50',
+5220:                 'placeholder' => '50',
+5223:             echo '</div></div>';
+5226:             echo '<div style="background: #fff; padding: 12px; margin: 10px 0; border-radius: 5px; border-left: 3px solid #8BC34A;">';
+5227:             echo '<h5 style="margin: 0 0 10px 0; color: #555;">Высота 2 (мм) - правая сторона</h5>';
+5228:             echo '<div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">';
+5231:                 'id' => '_shape_' . $shape_key . '_height2_min',
+5232:                 'label' => 'Минимум',
+5234:                 'custom_attributes' => ['step' => '1', 'min' => '1'],
+5235:                 'value' => isset($current_data['height2_min']) ? $current_data['height2_min'] : '',
+5236:                 'placeholder' => '100',
+5240:                 'id' => '_shape_' . $shape_key . '_height2_max',
+5241:                 'label' => 'Максимум',
+5243:                 'custom_attributes' => ['step' => '1', 'min' => '1'],
+5244:                 'value' => isset($current_data['height2_max']) ? $current_data['height2_max'] : '',
+5245:                 'placeholder' => '300',
+5249:                 'id' => '_shape_' . $shape_key . '_height2_step',
+5250:                 'label' => 'Шаг',
+5252:                 'custom_attributes' => ['step' => '1', 'min' => '1'],
+5253:                 'value' => isset($current_data['height2_step']) ? $current_data['height2_step'] : '50',
+5254:                 'placeholder' => '50',
+5257:             echo '</div></div>';
+5260:             echo '<div style="background: #fff; padding: 12px; margin: 10px 0; border-radius: 5px; border-left: 3px solid #4CAF50;">';
+5261:             echo '<h5 style="margin: 0 0 10px 0; color: #555;">Высота (мм)</h5>';
+5262:             echo '<div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">';
+5265:                 'id' => '_shape_' . $shape_key . '_height_min',
+5266:                 'label' => 'Минимум',
+5268:                 'custom_attributes' => ['step' => '1', 'min' => '1'],
+5269:                 'value' => isset($current_data['height_min']) ? $current_data['height_min'] : '',
+5270:                 'placeholder' => '100',
+5274:                 'id' => '_shape_' . $shape_key . '_height_max',
+5275:                 'label' => 'Максимум',
+5277:                 'custom_attributes' => ['step' => '1', 'min' => '1'],
+5278:                 'value' => isset($current_data['height_max']) ? $current_data['height_max'] : '',
+5279:                 'placeholder' => '300',
+5283:                 'id' => '_shape_' . $shape_key . '_height_step',
+5284:                 'label' => 'Шаг',
+5286:                 'custom_attributes' => ['step' => '1', 'min' => '1'],
+5287:                 'value' => isset($current_data['height_step']) ? $current_data['height_step'] : '50',
+5288:                 'placeholder' => '50',
+5291:             echo '</div></div>';
+5295:         echo '<div style="background: #fff; padding: 12px; margin: 10px 0; border-radius: 5px; border-left: 3px solid #FF9800;">';
+5296:         echo '<h5 style="margin: 0 0 10px 0; color: #555;">Длина (м)</h5>';
+5297:         echo '<div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">';
+5300:             'id' => '_shape_' . $shape_key . '_length_min',
+5301:             'label' => 'Минимум',
+5303:             'custom_attributes' => ['step' => '0.01', 'min' => '0.1'],
+5304:             'value' => isset($current_data['length_min']) ? $current_data['length_min'] : '',
+5305:             'placeholder' => '1.0',
+5309:             'id' => '_shape_' . $shape_key . '_length_max',
+5310:             'label' => 'Максимум',
+5312:             'custom_attributes' => ['step' => '0.01', 'min' => '0.1'],
+5313:             'value' => isset($current_data['length_max']) ? $current_data['length_max'] : '',
+5314:             'placeholder' => '6.0',
+5318:             'id' => '_shape_' . $shape_key . '_length_step',
+5319:             'label' => 'Шаг',
+5321:             'custom_attributes' => ['step' => '0.01', 'min' => '0.01'],
+5322:             'value' => isset($current_data['length_step']) ? $current_data['length_step'] : '0.5',
+5323:             'placeholder' => '0.5',
+5326:         echo '</div></div>';
+5328:         echo '</div>'; // .shape-params
+5329:         echo '</div>'; // блок формы
+5339:         $('input[id^="_shape_"][id$="_enabled"]').on('change', function() {
+5340:             var shapeKey = $(this).attr('id').replace('_shape_', '').replace('_enabled', '');
+5341:             var paramsBlock = $('.shape-params-' + shapeKey);
+5343:             if ($(this).is(':checked')) {
+5344:                 paramsBlock.css({
+5345:                     'opacity': '1',
+5346:                     'pointer-events': 'auto'
+5349:                 paramsBlock.css({
+5350:                     'opacity': '0.5',
+5351:                     'pointer-events': 'none'
+5357:         $('input[id*="_min"], input[id*="_max"]').on('blur', function() {
+5358:             var fieldId = $(this).attr('id');
+5359:             var isMin = fieldId.includes('_min');
+5360:             var baseId = fieldId.replace('_min', '').replace('_max', '');
+5362:             var minField = $('#' + baseId + '_min');
+5363:             var maxField = $('#' + baseId + '_max');
+5365:             var minVal = parseFloat(minField.val());
+5366:             var maxVal = parseFloat(maxField.val());
+5368:             if (minVal && maxVal && minVal >= maxVal) {
+5369:                 alert('⚠️ Максимальное значение должно быть больше минимального!');
+5370:                 if (isMin) {
+5371:                     minField.css('border-color', 'red');
+5373:                     maxField.css('border-color', 'red');
+5376:                 minField.css('border-color', '');
+5377:                 maxField.css('border-color', '');
+5383:     .falsebalk_shapes_group .form-field {
+5384:         padding: 8px 0 !important;
+5386:     .falsebalk_shapes_group input[type="number"] {
+5387:         max-width: 100px;
+5394: add_action('woocommerce_process_product_meta', 'save_falsebalk_shapes_fields');
+5395: function save_falsebalk_shapes_fields($post_id) {
+5396:     if (!has_term(266, 'product_cat', $post_id)) {
+5401:     $shapes = ['g', 'p', 'o'];
+5403:     foreach ($shapes as $shape_key) {
+5405:         $enabled = isset($_POST['_shape_' . $shape_key . '_enabled']) && $_POST['_shape_' . $shape_key . '_enabled'] === 'yes';
+5407:         if (!$enabled) {
+5412:         $width_min = isset($_POST['_shape_' . $shape_key . '_width_min']) ? floatval($_POST['_shape_' . $shape_key . '_width_min']) : 0;
+5413:         $width_max = isset($_POST['_shape_' . $shape_key . '_width_max']) ? floatval($_POST['_shape_' . $shape_key . '_width_max']) : 0;
+5414:         $width_step = isset($_POST['_shape_' . $shape_key . '_width_step']) ? floatval($_POST['_shape_' . $shape_key . '_width_step']) : 50;
+5416:         $length_min = isset($_POST['_shape_' . $shape_key . '_length_min']) ? floatval($_POST['_shape_' . $shape_key . '_length_min']) : 0;
+5417:         $length_max = isset($_POST['_shape_' . $shape_key . '_length_max']) ? floatval($_POST['_shape_' . $shape_key . '_length_max']) : 0;
+5418:         $length_step = isset($_POST['_shape_' . $shape_key . '_length_step']) ? floatval($_POST['_shape_' . $shape_key . '_length_step']) : 0.5;
+5421:         $shape_data = [
+5422:             'enabled' => true,
+5423:             'width_min' => $width_min,
+5424:             'width_max' => $width_max,
+5425:             'width_step' => $width_step > 0 ? $width_step : 50,
+5426:             'length_min' => $length_min,
+5427:             'length_max' => $length_max,
+5428:             'length_step' => $length_step > 0 ? $length_step : 0.5,
+5433:             $shape_data['height1_min'] = isset($_POST['_shape_' . $shape_key . '_height1_min']) ? floatval($_POST['_shape_' . $shape_key . '_height1_min']) : 0;
+5434:             $shape_data['height1_max'] = isset($_POST['_shape_' . $shape_key . '_height1_max']) ? floatval($_POST['_shape_' . $shape_key . '_height1_max']) : 0;
+5435:             $shape_data['height1_step'] = isset($_POST['_shape_' . $shape_key . '_height1_step']) ? floatval($_POST['_shape_' . $shape_key . '_height1_step']) : 50;
+5437:             $shape_data['height2_min'] = isset($_POST['_shape_' . $shape_key . '_height2_min']) ? floatval($_POST['_shape_' . $shape_key . '_height2_min']) : 0;
+5438:             $shape_data['height2_max'] = isset($_POST['_shape_' . $shape_key . '_height2_max']) ? floatval($_POST['_shape_' . $shape_key . '_height2_max']) : 0;
+5439:             $shape_data['height2_step'] = isset($_POST['_shape_' . $shape_key . '_height2_step']) ? floatval($_POST['_shape_' . $shape_key . '_height2_step']) : 50;
+5442:             $shape_data['height_min'] = isset($_POST['_shape_' . $shape_key . '_height_min']) ? floatval($_POST['_shape_' . $shape_key . '_height_min']) : 0;
+5443:             $shape_data['height_max'] = isset($_POST['_shape_' . $shape_key . '_height_max']) ? floatval($_POST['_shape_' . $shape_key . '_height_max']) : 0;
+5444:             $shape_data['height_step'] = isset($_POST['_shape_' . $shape_key . '_height_step']) ? floatval($_POST['_shape_' . $shape_key . '_height_step']) : 50;
+5448:         if ($width_min > 0 || $length_min > 0) {
+5449:             $shapes_data[$shape_key] = $shape_data;
+5453:     if (!empty($shapes_data)) {
+5456:         delete_post_meta($post_id, '_falsebalk_shapes_data');
+5462: add_filter('woocommerce_get_item_data', 'remove_price_from_painting_scheme_name', 15, 2);
+5463: function remove_price_from_painting_scheme_name($item_data, $cart_item) {
+5464:     foreach ($item_data as &$data) {
+5465:         if ($data['name'] === 'Схема покраски' || $data['name'] === 'Услуга покраски') {
+5466:             $data['value'] = preg_replace('/\s*[\(\+]?\s*\d+[\s\.,]?\d*\s*₽\s*\/\s*м[²2]\s*\)?/u', '', $data['value']);
+5467:             $data['value'] = trim($data['value']);
+5473: add_filter('woocommerce_order_item_display_meta_value', 'remove_price_from_order_painting_scheme', 10, 3);
+5474: function remove_price_from_order_painting_scheme($display_value, $meta, $item) {
+5475:     if ($meta->key === 'Схема покраски' || $meta->key === 'Услуга покраски') {
+5476:         $display_value = preg_replace('/\s*[\(\+]?\s*\d+[\s\.,]?\d*\s*₽\s*\/\s*м[²2]\s*\)?/u', '', $display_value);
+5477:         $display_value = trim($display_value);
+5486: add_filter('woocommerce_get_price_html', 'pm_adjust_running_meter_price_html', 20, 2);
+5487: function pm_adjust_running_meter_price_html($price_html, $product) {
+5488:     if (!is_object($product)) return $price_html;
+5490:     if (!function_exists('is_running_meter_category')) {
+5494:     $is_running_meter = is_running_meter_category($product_id);
+5496:     $is_falsebalk = false;
+5497:     if (function_exists('product_in_category')) {
+5498:         $is_falsebalk = product_in_category($product_id, 266);
+5500:     $show_falsebalk_calc = false;
+5501:     if ($is_falsebalk) {
+5503:         if (is_array($shapes_data)) {
+5506:                     $show_falsebalk_calc = true;
+5512: if ($is_running_meter) {
+5513:     $base_price_per_m = floatval($product->get_regular_price() ?: $product->get_price());
+5514:     if ($base_price_per_m) {
+5515:         $min_width = 0;
+5516:         $min_length = 0;
+5517:         $multiplier = 1;
+5520:         if ($is_falsebalk) {
+5522:             $min_variant = null;
+5524:             if (is_array($shapes_data)) {
+5525:                 foreach ($shapes_data as $shape_key => $shape) {
+5526:                     if (empty($shape['enabled'])) continue;
+5528:                     $width = floatval($shape['width_min'] ?: 100);
+5529:                     $length = floatval($shape['length_min'] ?: 1);
+5532:                     if (isset($shape['height_min'])) {
+5533:                         $height = floatval($shape['height_min']);
+5534:                     } elseif (isset($shape['height1_min'], $shape['height2_min'])) {
+5535:                         $height = floatval($shape['height1_min'] + $shape['height2_min']);
+5537:                         $height = $width;
+5541:                     $area = $width * $height;
+5542:                     if ($min_variant === null || $area < $min_variant['area']) {
+5543:                         $min_variant = [
+5544:                             'width' => $width,
+5545:                             'height' => $height,
+5546:                             'length' => $length,
+5547:                             'section_form' => $shape_key,
+5555:             if ($min_variant) {
+5556:                 $form_multipliers = ['g'=>2, 'p'=>3, 'o'=>4];
+5557:                 $multiplier = $form_multipliers[$min_variant['section_form']] ?? 1;
+5559:                 $min_width = $min_variant['width'];
+5560:                 $min_length = $min_variant['length'];
+5562:                 $min_width = 70;
+5563:                 $min_length = 0.2;
+5564:                 $multiplier = 2;
+5568:             $min_width = floatval(get_post_meta($product_id, '_calc_width_min', true)) ?: 100;
+5569:             $min_length = floatval(get_post_meta($product_id, '_calc_length_min', true)) ?: 1;
+5570:             $multiplier = function_exists('get_price_multiplier') ? get_price_multiplier($product_id) : 1;
+5573:         $min_length = round($min_length, 2);
+5574:         $min_area = ($min_width / 1000) * $min_length * $multiplier;
+5575:         $min_price = $base_price_per_m * $min_area;
+5578:         $should_hide_base_price = true;
+5579:         if (is_product()) {
+5580:             return '<span style="font-size:1.1em;">' . wc_price($min_price) . ' за шт.</span>';
+5582:             return '<span style="font-size:0.85em;">' . wc_price($min_price) . ' шт.</span>';
+5591: add_action('product_cat_edit_form_fields', 'add_category_faska_fields', 10, 2);
+5592: function add_category_faska_fields($term) {
+5593:     $term_id = $term->term_id;
+5594:     $faska_types = get_term_meta($term_id, 'faska_types', true);
+5595:     if (!$faska_types) {
+5596:         $faska_types = array();
+5600:         <th scope="row" valign="top"><label>Типы фасок</label></th>
+5602:             <div id="faska_types_container">
+5603:                 <?php for ($i = 1; $i <= 8; $i++): 
+5604:                     $faska = isset($faska_types[$i-1]) ? $faska_types[$i-1] : array('name' => '', 'image' => '');
+5606:                 <div style="margin-bottom: 15px; padding: 10px; border: 1px solid #ddd;">
+5607:                     <h4>Фаска <?php echo $i; ?></h4>
+5609:                         <label>Название: 
+5610:                             <input type="text" name="faska_types[<?php echo $i-1; ?>][name]" value="<?php echo esc_attr($faska['name']); ?>" style="width: 300px;" />
+5614:                         <label>URL изображения: 
+5615:                             <input type="text" name="faska_types[<?php echo $i-1; ?>][image]" value="<?php echo esc_url($faska['image']); ?>" style="width: 400px;" />
+5616:                             <button type="button" class="button upload_faska_image" data-index="<?php echo $i-1; ?>">Загрузить</button>
+5619:                     <?php if ($faska['image']): ?>
+5620:                     <p><img src="<?php echo esc_url($faska['image']); ?>" style="max-width: 100px; height: auto;" /></p>
+5623:                 <?php endfor; ?>
+5625:             <p class="description">Настройте до 8 типов фасок для этой категории</p>
+5629:                 $('.upload_faska_image').click(function(e) {
+5630:                     e.preventDefault();
+5631:                     var button = $(this);
+5632:                     var index = button.data('index');
+5633:                     var custom_uploader = wp.media({
+5634:                         title: 'Выберите изображение фаски',
+5635:                         button: { text: 'Использовать это изображение' },
+5636:                         multiple: false
+5637:                     }).on('select', function() {
+5638:                         var attachment = custom_uploader.state().get('selection').first().toJSON();
+5639:                         button.prev('input').val(attachment.url);
+5641:                         var imgContainer = button.closest('div').find('img');
+5642:                         if (imgContainer.length) {
+5643:                             imgContainer.attr('src', attachment.url);
+5645:                             button.closest('div').append('<p><img src="' + attachment.url + '" style="max-width: 100px; height: auto;" /></p>');
+5647:                     }).open();
+5657: add_action('edited_product_cat', 'save_category_faska_fields', 10, 2);
+5658: function save_category_faska_fields($term_id) {
+5660:         $faska_types = array();
+5662:             if (!empty($faska['name']) || !empty($faska['image'])) {
+5663:                 $faska_types[] = array(
+5674: add_filter('woocommerce_add_cart_item_data', 'add_faska_to_cart', 10, 3);
+5675: function add_faska_to_cart($cart_item_data, $product_id, $variation_id) {
+5676:     if (isset($_POST['selected_faska_type'])) {
+5677:         $cart_item_data['selected_faska'] = sanitize_text_field($_POST['selected_faska_type']);
+5683: add_filter('woocommerce_get_item_data', 'display_faska_in_cart', 10, 2);
+5684: function display_faska_in_cart($item_data, $cart_item) {
+5685:     if (isset($cart_item['selected_faska'])) {
+5687:             'key' => 'Тип фаски',
+5688:             'value' => $cart_item['selected_faska']
+5695: add_action('woocommerce_checkout_create_order_line_item', 'add_faska_to_order_items', 10, 4);
+5696: function add_faska_to_order_items($item, $cart_item_key, $values, $order) {
+5697:     if (isset($values['selected_faska'])) {
+5698:         $item->add_meta_data('Тип фаски', $values['selected_faska']);
+5703: add_filter('woocommerce_order_item_display_meta_key', 'filter_order_item_displayed_meta_key', 10, 3);
+5704: function filter_order_item_displayed_meta_key($display_key, $meta, $item) {
+5705:     if ($meta->key === 'Тип фаски') {
+5706:         $display_key = 'Тип фаски';
+5712: add_filter('woocommerce_order_item_display_meta_value', 'filter_order_item_displayed_meta_value', 10, 3);
+5713: function filter_order_item_displayed_meta_value($display_value, $meta, $item) {
+5714:     if ($meta->key === 'Тип фаски') {
+5715:         $display_value = '<strong>' . $meta->value . '</strong>';
+5721: add_filter( 'gettext', function( $translated, $text, $domain ) {
+5722:     if ( $domain === 'woocommerce' && $text === 'Subtotal' ) {
+5723:         $translated = 'Стоимость';
+5725:     return $translated;
+5726: }, 10, 3 );
+5728: $remove_archives_prefix = function( $title ) {
+5729:     return preg_replace('/^\s*Архивы[:\s\-\—]*/u', '', $title);
+5731: add_filter( 'wpseo_title', $remove_archives_prefix, 10 );
