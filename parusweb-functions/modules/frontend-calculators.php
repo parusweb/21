@@ -1,17 +1,20 @@
 <?php
 /**
- * Модуль: Frontend Calculators (ПОЛНАЯ ВЕРСИЯ)
+ * Модуль: Frontend Calculators (ПОЛНАЯ ВЕРСИЯ 2.0)
  * Описание: Весь JavaScript и PHP функционал калькуляторов
  * Зависимости: product-calculations, category-helpers
  * 
- * ВАЖНО: Содержит ВСЁ из frontend-calculators + legacy-javascript
+ * ВАЖНО: Содержит ВСЁ из functions_full_old.php + pm-paint-schemes
  */
 
 if (!defined('ABSPATH')) {
     exit;
 }
 
-// Вспомогательные функции
+// ====================
+// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+// ====================
+
 if (!function_exists('extract_dimensions_from_title')) {
     function extract_dimensions_from_title($title) {
         if (preg_match('/\d+\/(\d+)(?:\((\d+)\))?\/(\d+)-(\d+)/u', $title, $m)) {
@@ -38,7 +41,8 @@ if (!function_exists('get_available_painting_services_by_material')) {
                     if (!empty($service['name'])) {
                         $result[$key] = [
                             'name'  => $service['name'],
-                            'price' => floatval($service['price'] ?? 0)
+                            'price' => floatval($service['price'] ?? 0),
+                            'schemes' => $service['schemes'] ?? [] // ВАЖНО: схемы цветов
                         ];
                     }
                 }
@@ -48,7 +52,26 @@ if (!function_exists('get_available_painting_services_by_material')) {
     }
 }
 
-// === ГЛАВНЫЙ КАЛЬКУЛЯТОР ===
+// Получение данных схем покраски для конкретной услуги
+if (!function_exists('get_paint_schemes_for_service')) {
+    function get_paint_schemes_for_service($product_id, $service_key) {
+        $terms = wp_get_post_terms($product_id, 'product_cat', ['fields' => 'ids']);
+        if (is_wp_error($terms) || empty($terms)) return [];
+
+        foreach ($terms as $term_id) {
+            $services = get_term_meta($term_id, 'painting_services', true);
+            if (is_array($services) && isset($services[$service_key])) {
+                return $services[$service_key]['schemes'] ?? [];
+            }
+        }
+        return [];
+    }
+}
+
+// ====================
+// ГЛАВНЫЙ КАЛЬКУЛЯТОР
+// ====================
+
 add_action('wp_footer', function () {
     if (!is_product()) return;
     
@@ -135,18 +158,25 @@ add_action('wp_footer', function () {
     error_log('Final show_falsebalk_calc: ' . ($show_falsebalk_calc ? 'YES' : 'NO'));
     error_log('=== CALCULATOR DEBUG END ===');
     
-    if (!$is_target && !$is_multiplier) {
-        error_log('Product not in target or multiplier categories, exiting');
-        return;
-    }
-    
+    // Проверяем, нужно ли показывать калькулятор
     $title = $product->get_name();
     $pack_area = extract_area_with_qty($title, $product->get_id());
     $dims = extract_dimensions_from_title($title);
     
+    $should_show_calculator = $is_target || $is_multiplier || $pack_area || $dims;
+    
+    if (!$should_show_calculator) {
+        error_log('Product does not need calculator, exiting');
+        return;
+    }
+    
+    // Получаем доступные услуги покраски
     $painting_services = get_available_painting_services_by_material($product->get_id());
+    
+    // Получаем множитель цены
     $price_multiplier = get_price_multiplier($product->get_id());
     
+    // Получаем настройки калькулятора для категорий 265-271
     $calc_settings = null;
     if ($is_multiplier) {
         $calc_settings = [
@@ -159,7 +189,7 @@ add_action('wp_footer', function () {
         ];
     }
     
-    $product_id = $product->get_id();
+    // Определяем единицу измерения
     $leaf_parent_id = 190;
     $leaf_children = [191, 127, 94];
     $leaf_ids = array_merge([$leaf_parent_id], $leaf_children);
@@ -167,51 +197,70 @@ add_action('wp_footer', function () {
     $unit_text = $is_leaf_category ? 'лист' : 'упаковку';
     $unit_forms = $is_leaf_category ? ['лист', 'листа', 'листов'] : ['упаковка', 'упаковки', 'упаковок'];
     
+    // Проверяем, нужно ли показывать выбор фаски
+    $show_faska = false;
+    $faska_types = array();
+    
+    if ($is_multiplier) {
+        $product_cats = wp_get_post_terms($product->get_id(), 'product_cat', array('fields' => 'ids'));
+        if ($product_cats && !is_wp_error($product_cats)) {
+            foreach ($product_cats as $cat_id) {
+                if (in_array($cat_id, array(268, 270))) {
+                    $show_faska = true;
+                    $faska_types = get_term_meta($cat_id, 'faska_types', true);
+                    if ($faska_types) break;
+                }
+            }
+        }
+    }
+    
     ?>
     
     <script>
     console.log('ParusWeb Calculators v2.0 - Loading...');
     
+    // Глобальные константы
     const paintingServices = <?php echo json_encode($painting_services); ?>;
     const priceMultiplier = <?php echo $price_multiplier; ?>;
     const isMultiplierCategory = <?php echo $is_multiplier ? 'true' : 'false'; ?>;
     const isSquareMeter = <?php echo $is_square_meter ? 'true' : 'false'; ?>;
     const isRunningMeter = <?php echo $is_running_meter ? 'true' : 'false'; ?>;
     const calcSettings = <?php echo $calc_settings ? json_encode($calc_settings) : 'null'; ?>;
+    const productId = <?php echo $product_id; ?>;
+
+    console.log('Product ID:', productId);
+    console.log('Painting services:', paintingServices);
+    console.log('Price multiplier:', priceMultiplier);
+    console.log('Calculator settings:', calcSettings);
 
     document.addEventListener('DOMContentLoaded', function() {
-        console.log('ParusWeb Calculators - DOMContentLoaded', {
-            isSquareMeter,
-            isRunningMeter,
-            isMultiplierCategory,
-            calcSettings
-        });
-        
         let form = document.querySelector('form.cart') || 
                   document.querySelector('form[action*="add-to-cart"]') ||
-                  document.querySelector('.single_add_to_cart_button')?.closest('form');
-                  
+                  document.querySelector('.single_add_to_cart_button').closest('form');
         let quantityInput = document.querySelector('input[name="quantity"]') ||
                            document.querySelector('.qty') ||
                            document.querySelector('.input-text.qty');
         
         if (!form) {
-            console.warn('ParusWeb: Cart form not found');
+            console.error('Cart form not found!');
             return;
         }
 
+        // Создаем контейнер для калькулятора
         const resultBlock = document.createElement('div');
         resultBlock.id = 'custom-calc-block';
         resultBlock.className = 'calc-result-container';
-        resultBlock.style.cssText = 'margin-top:20px; margin-bottom:20px;';
+        resultBlock.style.marginTop = '20px';
+        resultBlock.style.marginBottom = '20px';
         form.insertAdjacentElement('afterend', resultBlock);
-        
-        console.log('✓ Result block created');
 
+        // Локальные переменные
         let isAutoUpdate = false;
 
-        // === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===
-        
+        // ==================
+        // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+        // ==================
+
         function getRussianPlural(n, forms) {
             n = Math.abs(n);
             n %= 100;
@@ -239,9 +288,11 @@ add_action('wp_footer', function () {
             return field;
         }
 
-        // === БЛОК УСЛУГ ПОКРАСКИ ===
-        
-        function createPaintingServicesBlock() {
+        // ==================
+        // БЛОК УСЛУГ ПОКРАСКИ
+        // ==================
+
+        function createPaintingServicesBlock(currentCategoryId) {
             if (Object.keys(paintingServices).length === 0) return null;
 
             const paintingBlock = document.createElement('div');
@@ -249,7 +300,12 @@ add_action('wp_footer', function () {
 
             let optionsHTML = '<option value="" selected>Без покраски</option>';
             Object.entries(paintingServices).forEach(([key, service]) => {
-                optionsHTML += `<option value="${key}" data-price="${service.price}">${service.name} (+${service.price} ₽/м²)</option>`;
+                let optionText = service.name;
+                // Добавляем цену только если категория вне диапазона 265-271
+                if (currentCategoryId < 265 || currentCategoryId > 271) {
+                    optionText += ` (+${service.price} ₽/м²)`;
+                }
+                optionsHTML += `<option value="${key}" data-price="${service.price}">${optionText}</option>`;
             });
 
             paintingBlock.innerHTML = `
@@ -261,20 +317,353 @@ add_action('wp_footer', function () {
                             ${optionsHTML}
                         </select>
                     </label>
-                    <div id="painting-service-result"></div>
+                    <div id="painting-service-result" style="display:none; margin-top:10px;"></div>
                 </div>
+
+                <!-- Контейнер для схем и цветов покраски -->
                 <div id="paint-schemes-root"></div>
             `;
             return paintingBlock;
         }
 
-        const paintingBlock = createPaintingServicesBlock();
+        const paintingBlock = createPaintingServicesBlock(<?php echo $product_categories[0]->term_id ?? 0; ?>);
 
-        // === КАЛЬКУЛЯТОР ПЛОЩАДИ ===
-        
+        // ==================
+        // ФУНКЦИЯ ОБНОВЛЕНИЯ ПОКРАСКИ
+        // ==================
+
+        function updatePaintingServiceCost(totalArea = null) {
+            console.log('=== updatePaintingServiceCost called ===');
+            console.log('  totalArea:', totalArea);
+            console.log('  paintingBlock exists:', !!paintingBlock);
+            
+            if (!paintingBlock) {
+                console.log('  No paintingBlock, returning 0');
+                return 0;
+            }
+            
+            const serviceSelect = document.getElementById('painting_service_select');
+            if (!serviceSelect) {
+                console.error('  ERROR: painting_service_select not found!');
+                return 0;
+            }
+            
+            const selectedOption = serviceSelect.options[serviceSelect.selectedIndex];
+            const paintingResult = document.getElementById('painting-service-result');
+            
+            console.log('  Selected option:', selectedOption ? selectedOption.value : 'none');
+            
+            if (!selectedOption || !selectedOption.value) {
+                console.log('  No service selected, hiding result');
+                if (paintingResult) paintingResult.style.display = 'none';
+                removeHiddenFields('painting_service_');
+                removeHiddenFields('pm_selected_');
+                
+                // Скрываем блок схем/цветов
+                const schemesRoot = document.getElementById('paint-schemes-root');
+                if (schemesRoot) schemesRoot.innerHTML = '';
+                
+                return 0;
+            }
+            
+            const serviceKey = selectedOption.value;
+            const servicePrice = parseFloat(selectedOption.dataset.price);
+            const serviceName = paintingServices[serviceKey].name;
+            
+            console.log('  Service:', serviceName);
+            console.log('  Price per m²:', servicePrice);
+            
+            // Создаем блок выбора схемы и цвета
+            loadPaintSchemes(serviceKey);
+            
+            if (!totalArea || totalArea <= 0) {
+                console.log('  No area, showing service name only');
+                if (paintingResult) {
+                    paintingResult.innerHTML = `<span style="color:#666;">Выбрана услуга: ${serviceName}<br>Введите размеры для расчета стоимости</span>`;
+                    paintingResult.style.display = 'block';
+                }
+                
+                // Сохраняем выбранную услугу даже без площади
+                createHiddenField('painting_service_key', serviceKey);
+                createHiddenField('painting_service_name', serviceName);
+                createHiddenField('painting_service_price_per_m2', servicePrice);
+                return 0;
+            }
+            
+            const totalPaintingCost = totalArea * servicePrice;
+            console.log('  Calculated cost:', totalPaintingCost, '₽');
+            
+            if (paintingResult) {
+                paintingResult.innerHTML = `<strong>${serviceName}:</strong> ${totalPaintingCost.toFixed(2)} ₽ <span style="color:#666;">(${totalArea.toFixed(3)} м² × ${servicePrice} ₽/м²)</span>`;
+                paintingResult.style.display = 'block';
+            }
+            
+            createHiddenField('painting_service_key', serviceKey);
+            createHiddenField('painting_service_name', serviceName);
+            createHiddenField('painting_service_price_per_m2', servicePrice);
+            createHiddenField('painting_service_area', totalArea.toFixed(3));
+            createHiddenField('painting_service_total_cost', totalPaintingCost.toFixed(2));
+            
+            console.log('=== updatePaintingServiceCost END, returning:', totalPaintingCost, '===');
+            return totalPaintingCost;
+        }
+
+        // ==================
+        // ЗАГРУЗКА СХЕМ И ЦВЕТОВ ПОКРАСКИ
+        // ==================
+
+        function loadPaintSchemes(serviceKey) {
+            console.log('Loading paint schemes for service:', serviceKey);
+            
+            const schemesRoot = document.getElementById('paint-schemes-root');
+            if (!schemesRoot) {
+                console.error('paint-schemes-root not found!');
+                return;
+            }
+            
+            const service = paintingServices[serviceKey];
+            if (!service || !service.schemes || service.schemes.length === 0) {
+                console.log('No schemes found for this service');
+                schemesRoot.innerHTML = '';
+                return;
+            }
+            
+            console.log('Found schemes:', service.schemes);
+            
+            // ШАГ 1: Создаем блок выбора схемы
+            let schemesHTML = `
+                <div id="paint-scheme-selection" style="margin-top: 15px; border: 2px solid #e0e0e0; padding: 15px; border-radius: 8px; background: #f9f9f9;">
+                    <h5 style="margin-bottom: 15px;">Выберите схему покраски:</h5>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px;">
+            `;
+            
+            service.schemes.forEach((scheme, index) => {
+                schemesHTML += `
+                    <label class="paint-scheme-option" data-scheme-slug="${scheme.slug}" style="cursor: pointer; padding: 10px; border: 2px solid #ddd; border-radius: 8px; transition: all 0.3s; background: #fff;">
+                        <input type="radio" name="pm_selected_scheme" value="${scheme.slug}" style="display: none;">
+                        <div style="font-weight: 600; margin-bottom: 5px;">${scheme.name}</div>
+                        <div style="font-size: 12px; color: #666;">Выберите эту схему</div>
+                    </label>
+                `;
+            });
+            
+            schemesHTML += '</div></div>';
+            
+            // ШАГ 2: Контейнер для цветов (будет заполнен после выбора схемы)
+            schemesHTML += '<div id="paint-colors-root" style="margin-top: 15px;"></div>';
+            
+            schemesRoot.innerHTML = schemesHTML;
+            
+            // Добавляем обработчик выбора схемы
+            document.querySelectorAll('.paint-scheme-option').forEach(option => {
+                option.addEventListener('click', function() {
+                    const radio = this.querySelector('input[type="radio"]');
+                    radio.checked = true;
+                    
+                    // Стилизация выбранной схемы
+                    document.querySelectorAll('.paint-scheme-option').forEach(opt => {
+                        opt.style.borderColor = '#ddd';
+                        opt.style.boxShadow = 'none';
+                    });
+                    this.style.borderColor = '#4CAF50';
+                    this.style.boxShadow = '0 0 8px rgba(76, 175, 80, 0.4)';
+                    
+                    // Загружаем цвета для выбранной схемы
+                    const schemeSlug = this.dataset.schemeSlug;
+                    const selectedScheme = service.schemes.find(s => s.slug === schemeSlug);
+                    
+                    if (selectedScheme) {
+                        createHiddenField('pm_selected_scheme_name', selectedScheme.name);
+                        createHiddenField('pm_selected_scheme_slug', selectedScheme.slug);
+                        loadPaintColors(selectedScheme.colors, selectedScheme.name);
+                    }
+                });
+            });
+            
+            // Добавляем hover эффект
+            document.querySelectorAll('.paint-scheme-option').forEach(option => {
+                option.addEventListener('mouseenter', function() {
+                    if (!this.querySelector('input[type="radio"]').checked) {
+                        this.style.borderColor = '#4CAF50';
+                        this.style.transform = 'scale(1.02)';
+                    }
+                });
+                
+                option.addEventListener('mouseleave', function() {
+                    if (!this.querySelector('input[type="radio"]').checked) {
+                        this.style.borderColor = '#ddd';
+                        this.style.transform = 'scale(1)';
+                    }
+                });
+            });
+        }
+
+        function loadPaintColors(colors, schemeName) {
+            console.log('Loading paint colors for scheme:', schemeName, colors);
+            
+            const colorsRoot = document.getElementById('paint-colors-root');
+            if (!colorsRoot) {
+                console.error('paint-colors-root not found!');
+                return;
+            }
+            
+            if (!colors || colors.length === 0) {
+                console.log('No colors found for this scheme');
+                colorsRoot.innerHTML = '<p style="color: #999;">Нет доступных цветов для этой схемы</p>';
+                return;
+            }
+            
+            let colorsHTML = `
+                <div style="border: 2px solid #e0e0e0; padding: 15px; border-radius: 8px; background: #f9f9f9;">
+                    <h5 style="margin-bottom: 15px;">Выберите цвет покраски:</h5>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 15px;">
+            `;
+            
+            colors.forEach((color, index) => {
+                const cleanFilename = cleanColorFilename(color.filename);
+                colorsHTML += `
+                    <label class="paint-color-option" style="cursor: pointer; text-align: center; transition: all 0.3s;">
+                        <input type="radio" name="pm_selected_color" value="${color.filename}" data-image="${color.url}" data-clean="${cleanFilename}" style="display: none;">
+                        <div style="border: 3px solid #ddd; border-radius: 8px; overflow: hidden; aspect-ratio: 1; background: #fff;">
+                            <img src="${color.url}" alt="${cleanFilename}" style="width: 100%; height: 100%; object-fit: cover;">
+                        </div>
+                        <div style="margin-top: 5px; font-size: 11px; font-weight: 500;">${cleanFilename}</div>
+                    </label>
+                `;
+            });
+            
+            colorsHTML += '</div></div>';
+            
+            colorsRoot.innerHTML = colorsHTML;
+            
+            // Добавляем обработчик выбора цвета
+            document.querySelectorAll('.paint-color-option').forEach(option => {
+                option.addEventListener('click', function() {
+                    const radio = this.querySelector('input[type="radio"]');
+                    radio.checked = true;
+                    
+                    // Стилизация выбранного цвета
+                    document.querySelectorAll('.paint-color-option div').forEach(div => {
+                        div.style.borderColor = '#ddd';
+                        div.style.boxShadow = 'none';
+                    });
+                    const imgContainer = this.querySelector('div');
+                    imgContainer.style.borderColor = '#4CAF50';
+                    imgContainer.style.boxShadow = '0 0 12px rgba(76, 175, 80, 0.6)';
+                    
+                    // Сохраняем выбранный цвет
+                    const colorImage = radio.dataset.image;
+                    const colorFilename = radio.dataset.clean;
+                    
+                    createHiddenField('pm_selected_color_image', colorImage);
+                    createHiddenField('pm_selected_color_filename', colorFilename);
+                    
+                    console.log('Color selected:', colorFilename, colorImage);
+                    
+                    // Пересчитываем калькулятор
+                    recalculateActiveCalculator();
+                });
+            });
+            
+            // Добавляем hover эффект для цветов
+            document.querySelectorAll('.paint-color-option').forEach(option => {
+                option.addEventListener('mouseenter', function() {
+                    if (!this.querySelector('input[type="radio"]').checked) {
+                        const imgContainer = this.querySelector('div');
+                        imgContainer.style.borderColor = '#4CAF50';
+                        imgContainer.style.transform = 'scale(1.05)';
+                    }
+                });
+                
+                option.addEventListener('mouseleave', function() {
+                    if (!this.querySelector('input[type="radio"]').checked) {
+                        const imgContainer = this.querySelector('div');
+                        imgContainer.style.borderColor = '#ddd';
+                        imgContainer.style.transform = 'scale(1)';
+                    }
+                });
+            });
+        }
+
+        // Функция очистки имени файла цвета
+        function cleanColorFilename(filename) {
+            // Убираем расширение
+            filename = filename.replace(/\.(jpg|jpeg|png|webp|gif)$/i, '');
+            
+            // Убираем суффиксы типа -180, -1, -kopiya, _180 и т.д.
+            filename = filename.replace(/[-_](180|kopiya|copy|1|2|3)$/i, '');
+            
+            // Шаблоны для извлечения только кода цвета
+            const patterns = [
+                { regex: /^img[_-]?(\d+)[-_].*$/i, replace: '$1' },
+                { regex: /^(\d+)[-_]\d+$/i, replace: '$1' },
+                { regex: /^[a-z]+[_-]?[a-z]*[_-]?(\d+)$/i, replace: '$1' },
+                { regex: /^(\d+)$/i, replace: '$1' }
+            ];
+            
+            for (const pattern of patterns) {
+                if (pattern.regex.test(filename)) {
+                    filename = filename.replace(pattern.regex, pattern.replace);
+                    break;
+                }
+            }
+            
+            return filename;
+        }
+
+        // Функция пересчета активного калькулятора
+        function recalculateActiveCalculator() {
+            const areaInput = document.getElementById('calc_area_input');
+            const widthEl = document.getElementById('custom_width');
+            const lengthEl = document.getElementById('custom_length');
+            const multWidthEl = document.getElementById('mult_width');
+            const multLengthEl = document.getElementById('mult_length');
+            const rmLengthEl = document.getElementById('rm_length');
+            const sqWidthEl = document.getElementById('sq_width');
+            const sqLengthEl = document.getElementById('sq_length');
+            
+            if (areaInput && areaInput.value && parseFloat(areaInput.value) > 0) {
+                console.log('→ Recalculating AREA calculator');
+                updateAreaCalc();
+            } else if (widthEl && lengthEl && widthEl.value && lengthEl.value) {
+                console.log('→ Recalculating DIMENSIONS calculator');
+                updateDimCalc(true);
+            } else if (multWidthEl && multLengthEl && multWidthEl.value && multLengthEl.value) {
+                console.log('→ Recalculating MULTIPLIER calculator');
+                updateMultiplierCalc();
+            } else if (rmLengthEl && rmLengthEl.value) {
+                console.log('→ Recalculating RUNNING METER calculator');
+                updateRunningMeterCalc();
+            } else if (sqWidthEl && sqLengthEl && sqWidthEl.value && sqLengthEl.value) {
+                console.log('→ Recalculating SQUARE METER calculator');
+                updateSquareMeterCalc();
+            }
+        }
+
+        // Обработчик изменения услуги покраски
+        if (paintingBlock) {
+            const serviceSelect = document.getElementById('painting_service_select');
+            if (serviceSelect) {
+                console.log('Setting up painting service change handler');
+                
+                serviceSelect.addEventListener('change', function() {
+                    console.log('=== PAINTING SERVICE CHANGED ===');
+                    console.log('Selected:', this.options[this.selectedIndex].text);
+                    
+                    // Определяем активный калькулятор и пересчитываем
+                    recalculateActiveCalculator();
+                });
+            } else {
+                console.error('ERROR: painting_service_select not found in DOM!');
+            }
+        }
+
+        // ==================
+        // КАЛЬКУЛЯТОРЫ
+        // ==================
+
         <?php if($pack_area && $is_target): ?>
-        console.log('Creating area calculator');
-        
+        // Калькулятор площади
         const areaCalc = document.createElement('div');
         areaCalc.id = 'calc-area';
         areaCalc.innerHTML = `
@@ -346,13 +735,6 @@ add_action('wp_footer', function () {
         areaInput.addEventListener('input', updateAreaCalc);
         
         if (quantityInput) {
-            quantityInput.addEventListener('input', function() {
-                if (!isAutoUpdate && areaInput.value) {
-                    areaInput.value = '';
-                    updateAreaCalc();
-                }
-            });
-            
             quantityInput.addEventListener('change', function() {
                 if (!isAutoUpdate) {
                     const packs = parseInt(this.value);
@@ -366,11 +748,8 @@ add_action('wp_footer', function () {
         }
         <?php endif; ?>
 
-        // === КАЛЬКУЛЯТОР РАЗМЕРОВ ===
-        
-        <?php if($dims && $is_target && !$is_falsebalk): ?>
-        console.log('Creating dimensions calculator');
-        
+        <?php if($dims && $is_target): ?>
+        // Калькулятор размеров
         const dimCalc = document.createElement('div');
         dimCalc.id = 'calc-dim';
         let dimHTML = '<br><h4>Расчет по размерам</h4><div style="display:flex;gap:20px;flex-wrap:wrap;align-items: center;white-space:nowrap">';
@@ -429,66 +808,23 @@ add_action('wp_footer', function () {
                     quantityInput.dispatchEvent(new Event('change', { bubbles: true }));
                     setTimeout(() => { isAutoUpdate = false; }, 100);
                 }
-            } else if (!dimInitialized) {
-                dimInitialized = true;
             }
         }
 
         widthEl.addEventListener('change', () => updateDimCalc(true));
         lengthEl.addEventListener('change', () => updateDimCalc(true));
         
-        if (quantityInput) {
-            quantityInput.addEventListener('input', function() {
-                if (!isAutoUpdate && form.querySelector('input[name="custom_width_val"]')) {
-                    removeHiddenFields('custom_');
-                    removeHiddenFields('painting_service_');
-                    widthEl.selectedIndex = 0;
-                    lengthEl.selectedIndex = 0;
-                    const paintingSelect = document.getElementById('painting_service_select');
-                    if (paintingSelect) paintingSelect.selectedIndex = 0;
-                    updateDimCalc(false);
-                }
-            });
-        }
-        
         updateDimCalc(false);
         <?php endif; ?>
 
-        // === КАЛЬКУЛЯТОР ДЛЯ СТОЛЯРКИ (С ФАСКОЙ) ===
-        
-        <?php 
-        // Проверяем фаску для ПОДОКОННИКОВ (категории 268, 270)
-        $product_cats = wp_get_post_terms($product->get_id(), 'product_cat', array('fields' => 'ids'));
-        $show_faska = false;
-        $faska_types = array();
-
-        if ($product_cats && !is_wp_error($product_cats)) {
-            foreach ($product_cats as $cat_id) {
-                // ИСПРАВЛЕНО: проверяем категории 268 и 270 для подоконников
-                if (in_array($cat_id, array(268, 270))) {
-                    $show_faska = true;
-                    $faska_types = get_term_meta($cat_id, 'faska_types', true);
-                    if ($faska_types) {
-                        error_log('✓ Faska types found for category ' . $cat_id . ': ' . print_r($faska_types, true));
-                        break;
-                    }
-                }
-            }
-        }
-        
-        error_log('Show faska: ' . ($show_faska ? 'YES' : 'NO') . ', Types count: ' . count($faska_types));
-        ?>
-
-        <?php if($is_multiplier && !$show_falsebalk_calc): ?>
-        console.log('Creating multiplier calculator', { showFaska: <?php echo $show_faska ? 'true' : 'false'; ?> });
-        
+        <?php if($is_multiplier && !$show_falsebalk_calc && !$is_running_meter): ?>
+        // Калькулятор с множителем (столярка)
         const multiplierCalc = document.createElement('div');
         multiplierCalc.id = 'calc-multiplier';
 
         let calcHTML = '<br><h4>Калькулятор стоимости</h4>';
         calcHTML += '<div style="display:flex;gap:20px;flex-wrap:wrap;align-items: center;">';
 
-        // Поле ширины
         if (calcSettings && calcSettings.width_min > 0 && calcSettings.width_max > 0) {
             calcHTML += `<label>Ширина (мм): 
                 <select id="mult_width" style="background:#fff;margin-left:10px;">
@@ -503,10 +839,9 @@ add_action('wp_footer', function () {
             </label>`;
         }
 
-        // Поле длины
         if (calcSettings && calcSettings.length_min > 0 && calcSettings.length_max > 0) {
             calcHTML += `<label>Длина (м): 
-                <select id="mult_length" style="margin-left:10px;background:#fff;">
+                <select id="mult_length" min="0.01" step="0.01" style="margin-left:10px;background:#fff;">
                     <option value="">Выберите...</option>`;
             
             const lengthMin = calcSettings.length_min;
@@ -527,15 +862,10 @@ add_action('wp_footer', function () {
             </label>`;
         }
 
-        calcHTML += '</div>';
-
         <?php if ($show_faska && !empty($faska_types)): ?>
-        // ИСПРАВЛЕНО: Добавляем выбор фаски для подоконников
-        console.log('Adding faska selection');
-        
         calcHTML += `<div id="faska_selection" style="margin-top: 10px; display: none;">
-            <h5 style="margin-bottom: 10px;">Выберите тип фаски:</h5>
-            <div id="faska_grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
+            <h5>Выберите тип фаски:</h5>
+            <div id="faska_grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 10px;">
                 <?php foreach ($faska_types as $index => $faska): 
                     if (!empty($faska['name'])): ?>
                 <label class="faska-option" style="cursor: pointer; text-align: center; padding: 8px; border: 2px solid #ddd; border-radius: 8px; transition: all 0.3s;">
@@ -548,38 +878,17 @@ add_action('wp_footer', function () {
                 <?php endif; 
                 endforeach; ?>
             </div>
-            <div id="faska_selected" style="display: none; margin-top: 20px; text-align: center; padding: 10px; border: 2px solid #4CAF50; border-radius: 8px; background: #f9f9f9;">
+            <div id="faska_selected" style="display: none; margin-top: 20px; text-align: center; padding: 10px; border: 2px solid #4CAF50; border-radius: 8px;">
                 <p>Выбранная фаска: <span id="faska_selected_name"></span></p>
-                <img id="faska_selected_image" src="" alt="" style="max-height: 200px;">
+                <img id="faska_selected_image" src="" alt="" style="max-width: 300px;">
                 <div style="margin-top: 10px;">
                     <button type="button" id="change_faska_btn" style="padding: 8px 20px; background: #0073aa; color: white; border: none; border-radius: 4px; cursor: pointer;">Изменить выбор</button>
                 </div>
             </div>
         </div>`;
-
-        // CSS для фаски
-        document.head.insertAdjacentHTML('beforeend', `
-        <style>
-        #faska_selection .faska-option:has(input:checked) {
-            border-color: #0073aa !important;
-            background-color: #f0f8ff;
-            box-shadow: 0 0 8px rgba(0,115,170,0.4);
-        }
-        #faska_selection .faska-option:hover {
-            border-color: #0073aa;
-            transform: scale(1.05);
-        }
-        @media (max-width: 768px) {
-            #faska_grid { grid-template-columns: repeat(3, 1fr) !important; }
-        }
-        @media (max-width: 480px) {
-            #faska_grid { grid-template-columns: repeat(2, 1fr) !important; }
-        }
-        </style>
-        `);
         <?php endif; ?>
 
-        calcHTML += '<div id="calc_mult_result" style="margin-top:10px; font-size:1.3em"></div>';
+        calcHTML += '</div><div id="calc_mult_result" style="margin-top:10px; font-size:1.3em"></div>';
         multiplierCalc.innerHTML = calcHTML;
         resultBlock.appendChild(multiplierCalc);
 
@@ -593,24 +902,14 @@ add_action('wp_footer', function () {
         const basePriceMult = <?php echo floatval($product->get_price()); ?>;
 
         function updateMultiplierCalc() {
-            const widthValue = parseFloat(multWidthEl?.value);
-            const lengthValue = parseFloat(multLengthEl?.value);
+            const widthValue = parseFloat(multWidthEl && multWidthEl.value);
+            const lengthValue = parseFloat(multLengthEl && multLengthEl.value);
             const quantity = (quantityInput && !isNaN(parseInt(quantityInput.value))) ? parseInt(quantityInput.value) : 1;
 
             <?php if ($show_faska): ?>
-            // Показываем фаску только если введены размеры
             const faskaSelection = document.getElementById('faska_selection');
             if (faskaSelection) {
-                if (widthValue > 0 && lengthValue > 0) {
-                    faskaSelection.style.display = 'block';
-                    console.log('✓ Faska selection visible');
-                } else {
-                    faskaSelection.style.display = 'none';
-                    const faskaInputs = document.querySelectorAll('input[name="faska_type"]');
-                    faskaInputs.forEach(input => input.checked = false);
-                    document.getElementById('faska_grid').style.display = 'grid';
-                    document.getElementById('faska_selected').style.display = 'none';
-                }
+                faskaSelection.style.display = (widthValue > 0 && lengthValue > 0) ? 'block' : 'none';
             }
             <?php endif; ?>
 
@@ -634,7 +933,6 @@ add_action('wp_footer', function () {
 
             let html = `Площадь 1 шт: <b>${areaPerItem.toFixed(3)} м²</b><br>`;
             html += `Общая площадь: <b>${totalArea.toFixed(3)} м²</b> (${quantity} шт)<br>`;
-            html += `Толщина: <b>40мм</b><br>`;
             html += `Цена за 1 шт: <b>${pricePerItem.toFixed(2)} ₽</b><br>`;
             html += `Стоимость материала: <b>${materialPrice.toFixed(2)} ₽</b><br>`;
             
@@ -660,36 +958,27 @@ add_action('wp_footer', function () {
             const selectedFaska = document.querySelector('input[name="faska_type"]:checked');
             if (selectedFaska) {
                 createHiddenField('selected_faska_type', selectedFaska.value);
-            } else {
-                removeHiddenFields('selected_faska_');
             }
             <?php endif; ?>
         }
 
-        if (multWidthEl) multWidthEl.addEventListener('change', updateMultiplierCalc);
-        if (multLengthEl) multLengthEl.addEventListener('change', updateMultiplierCalc);
+        multWidthEl.addEventListener('change', updateMultiplierCalc);
+        multLengthEl.addEventListener('change', updateMultiplierCalc);
 
         <?php if ($show_faska): ?>
-        // Обработчик фаски
         setTimeout(function() {
             const faskaInputs = document.querySelectorAll('input[name="faska_type"]');
             const faskaGrid = document.getElementById('faska_grid');
             const faskaSelected = document.getElementById('faska_selected');
-            const faskaSelectedName = document.getElementById('faska_selected_name');
-            const faskaSelectedImage = document.getElementById('faska_selected_image');
             const changeFaskaBtn = document.getElementById('change_faska_btn');
-            
-            console.log('✓ Setting up faska handlers, inputs found:', faskaInputs.length);
             
             faskaInputs.forEach(input => {
                 input.addEventListener('change', function() {
                     if (this.checked) {
                         faskaGrid.style.display = 'none';
                         faskaSelected.style.display = 'block';
-                        faskaSelectedName.textContent = this.value;
-                        faskaSelectedImage.src = this.dataset.image;
-                        faskaSelectedImage.alt = this.value;
-                        console.log('✓ Faska selected:', this.value);
+                        document.getElementById('faska_selected_name').textContent = this.value;
+                        document.getElementById('faska_selected_image').src = this.dataset.image;
                     }
                     updateMultiplierCalc();
                 });
@@ -706,112 +995,13 @@ add_action('wp_footer', function () {
 
         if (quantityInput) {
             quantityInput.addEventListener('change', function() {
-                if (!isAutoUpdate && multWidthEl && multWidthEl.value && multLengthEl && multLengthEl.value) {
+                if (!isAutoUpdate && multWidthEl.value && multLengthEl.value) {
                     updateMultiplierCalc();
                 }
             });
         }
         <?php endif; ?>
 
-        // === ФУНКЦИЯ ОБНОВЛЕНИЯ ПОКРАСКИ ===
-        
-        function updatePaintingServiceCost(totalArea = null) {
-            if (!paintingBlock) return 0;
-            
-            const serviceSelect = document.getElementById('painting_service_select');
-            if (!serviceSelect) return 0;
-            
-            const selectedOption = serviceSelect.options[serviceSelect.selectedIndex];
-            const paintingResult = document.getElementById('painting-service-result');
-            
-            if (!paintingResult) return 0;
-            
-            if (!selectedOption || !selectedOption.value) {
-                paintingResult.innerHTML = '';
-                removeHiddenFields('painting_service_');
-                return 0;
-            }
-            
-            const serviceKey = selectedOption.value;
-            const servicePrice = parseFloat(selectedOption.dataset.price);
-            
-            if (!totalArea) {
-                paintingResult.innerHTML = `Выбрана услуга: ${paintingServices[serviceKey].name}`;
-                return 0;
-            }
-            
-            const totalPaintingCost = totalArea * servicePrice;
-            paintingResult.innerHTML = `${paintingServices[serviceKey].name}: ${totalPaintingCost.toFixed(2)} ₽ (${totalArea.toFixed(3)} м² × ${servicePrice} ₽/м²)`;
-            
-            createHiddenField('painting_service_key', serviceKey);
-            createHiddenField('painting_service_name', paintingServices[serviceKey].name);
-            createHiddenField('painting_service_price_per_m2', servicePrice);
-            createHiddenField('painting_service_area', totalArea.toFixed(3));
-            createHiddenField('painting_service_total_cost', totalPaintingCost.toFixed(2));
-            
-            return totalPaintingCost;
-        }
-
-        // Обработчик услуг покраски
-        if (paintingBlock) {
-            const serviceSelect = document.getElementById('painting_service_select');
-            if (serviceSelect) {
-                serviceSelect.addEventListener('change', function() {
-                    const areaInput = document.getElementById('calc_area_input');
-                    const widthEl = document.getElementById('custom_width');
-                    const lengthEl = document.getElementById('custom_length');
-                    const multWidthEl = document.getElementById('mult_width');
-                    const multLengthEl = document.getElementById('mult_length');
-
-                    if (areaInput && areaInput.value) {
-                        updateAreaCalc();
-                        return;
-                    }
-
-                    if (widthEl && lengthEl) {
-                        const width = parseFloat(widthEl.value);
-                        const length = parseFloat(lengthEl.value);
-                        if (width > 0 && length > 0) {
-                            updateDimCalc(true);
-                            return;
-                        }
-                    }
-
-                    if (multWidthEl && multLengthEl) {
-                        const width = parseFloat(multWidthEl.value);
-                        const length = parseFloat(multLengthEl.value);
-                        if (width > 0 && length > 0) {
-                            updateMultiplierCalc();
-                            return;
-                        }
-                    }
-
-                    updatePaintingServiceCost(0);
-                });
-            }
-        }
-        
-        // Обработчик выбора цвета покраски
-        document.addEventListener('change', function(e) {
-            if (e.target.name === 'pm_selected_color') {
-                console.log('Paint color changed, recalculating...');
-                
-                const areaInput = document.getElementById('calc_area_input');
-                const widthEl = document.getElementById('custom_width');
-                const lengthEl = document.getElementById('custom_length');
-                const multWidthEl = document.getElementById('mult_width');
-                const multLengthEl = document.getElementById('mult_length');
-                
-                if (areaInput && areaInput.value) {
-                    updateAreaCalc();
-                } else if (widthEl && lengthEl && widthEl.value && lengthEl.value) {
-                    updateDimCalc(true);
-                } else if (multWidthEl && multLengthEl && multWidthEl.value && multLengthEl.value) {
-                    updateMultiplierCalc();
-                }
-            }
-        });
-        
         console.log('✅ ParusWeb Calculators v2.0 - Initialized successfully');
     });
     </script>
